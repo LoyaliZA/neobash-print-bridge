@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <RootNamespace>Neobash.PrintBridge.VirtualPrinter</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Version>$(NpbPackageVersion)</Version>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxBundle>Never</AppxBundle>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Square44x44Logo.png" />
+    <Content Include="Assets\Square150x150Logo.png" />
+    <Content Include="Assets\Wide310x150Logo.png" />
+    <Content Include="Assets\SplashScreen.png" />
+    <Content Include="Config\NpbPruebaVirtual.pdc.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9457" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VirtualPrinter.Tasks\Neobash.PrintBridge.VirtualPrinter.Tasks.csproj" />
+  </ItemGroup>
+
+  <Target Name="VerifyPackageIdentity" BeforeTargets="Build">
+    <XmlPeek XmlInputPath="Package.appxmanifest" Query="/*[local-name()='Package']/*[local-name()='Identity']/@Name">
+      <Output TaskParameter="Result" PropertyName="_ManifestName" />
+    </XmlPeek>
+    <XmlPeek XmlInputPath="Package.appxmanifest" Query="/*[local-name()='Package']/*[local-name()='Identity']/@Publisher">
+      <Output TaskParameter="Result" PropertyName="_ManifestPublisher" />
+    </XmlPeek>
+    <XmlPeek XmlInputPath="Package.appxmanifest" Query="/*[local-name()='Package']/*[local-name()='Identity']/@Version">
+      <Output TaskParameter="Result" PropertyName="_ManifestVersion" />
+    </XmlPeek>
+    <Error Condition="'$(_ManifestName)' != '$(NpbPackageName)'" Text="El nombre del paquete debe permanecer estable." />
+    <Error Condition="'$(_ManifestPublisher)' != '$(NpbPackagePublisher)'" Text="El Publisher del paquete debe permanecer estable." />
+    <Error Condition="'$(_ManifestVersion)' != '$(NpbPackageVersion)'" Text="La versión del manifiesto debe coincidir con NpbPackageVersion." />
+  </Target>
+
+  <Target Name="IncludeTasksWinmd" AfterTargets="Build">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\VirtualPrinter.Tasks\Neobash.PrintBridge.VirtualPrinter.Tasks.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs" ItemName="_TasksAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <_TasksWinmd Include="@(_TasksAssembly->'%(RootDir)%(Directory)%(Filename).winmd')" />
+    </ItemGroup>
+    <Warning Text="No se encontró el winmd de la tarea de impresora virtual." Condition="!Exists('%(_TasksWinmd.Identity)')" />
+    <Copy SourceFiles="@(_TasksWinmd)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('%(_TasksWinmd.Identity)')" />
+  </Target>
+
+  <PropertyGroup Condition="'$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,125 @@
+# Instalación y desinstalación de la POC 01
+
+La compilación no instala el paquete ni modifica la confianza del equipo. Los cambios de sistema quedan en un comando aparte, con aprobación explícita y una consola elevada.
+
+El MSIX ya firmado se conserva. No hace falta recompilarlo para este procedimiento:
+
+`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64_Test\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64.msix`
+
+El firmante es `CN=Neobash Print Bridge POC`. En Windows 11, un MSIX firmado puede registrarse por sideloading cuando ese certificado público está en `Cert:\LocalMachine\TrustedPeople`. El modo de desarrollador no forma parte del intento inicial y este procedimiento no lo activa.
+
+## Qué queda fuera del intento inicial
+
+- No se activa el modo de desarrollador ni se escribe `AllowDevelopmentWithoutDevLicense`.
+- No se cambia `AllowAllTrustedApps` ni se ejecuta `bcdedit /set TESTSIGNING`.
+- No se usa `local-certs\npb-poc.pfx` para establecer confianza. El PFX solo sirve para firmar y para comprobar que es el mismo certificado.
+- No se importa el certificado en `Cert:\CurrentUser\TrustedPeople`, en `Root` ni en `CA`.
+- No se llama a `Remove-Printer` ni se eliminan otros paquetes.
+
+Si el registro falla, el script muestra el código y se detiene. Un cambio adicional solo se plantea cuando el error lo justifica, y queda para una autorización distinta.
+
+## Comprobación, sin cambios de sistema
+
+Desde la raíz del repositorio:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\install.ps1
+```
+
+Ese comando:
+
+1. Elige el MSIX de mayor versión de `Neobash.PrintBridge.VirtualPrinter`.
+2. Rechaza una firma dañada, ausente o de otro firmante.
+3. Lee `AppxManifest.xml` y exige una sola cola, `NPB - Prueba Virtual`, formato `application/oxps`, sin `OutputFileTypes`, y la capacidad `runFullTrust`.
+4. Comprueba que el PFX local, si existe, tiene el mismo thumbprint que la firma. No lo importa.
+5. Exporta el certificado público a `local-certs\npb-poc.cer` desde el firmante del MSIX y registra el thumbprint en `local-certs\npb-poc.thumbprint.txt`.
+
+Esos dos archivos están fuera de Git, junto con el PFX. El comando termina con código 2 y no toca almacenes, impresoras ni paquetes.
+
+Authenticode puede informar que la cadena termina en una raíz no confiable. Eso es esperable antes de confiar el certificado público y no equivale a una firma inválida.
+
+## Instalación autorizada
+
+Hace falta la misma cuenta de Windows que va a imprimir, en una consola abierta como administrador. La confianza queda en el equipo; el paquete se registra para esa cuenta. Otra cuenta de administración no debe ejecutar este paso.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\install.ps1 -ConfirmSystemChanges
+```
+
+Sin el modificador, o sin elevación, no hay cambios. Con ambas condiciones el script hace solo esto:
+
+1. Repite la comprobación de firma y contenido.
+2. Importa `local-certs\npb-poc.cer` en `Cert:\LocalMachine\TrustedPeople` si ese thumbprint todavía no está.
+3. Si ya hay otro certificado con el mismo nombre y otro thumbprint, se detiene sin borrarlo ni sustituirlo.
+4. Ejecuta `Add-AppxPackage` sobre el MSIX comprobado.
+5. Comprueba que la única cola nueva es `NPB - Prueba Virtual`, que las demás conservan controlador y puerto, y que no apareció ni desapareció otro paquete de otra identidad.
+6. Si Windows cambia la impresora predeterminada, intenta devolver la anterior.
+
+El certificado que debe quedar confiado es el de esta firma:
+
+`70C7483FE4B6ECAC9FAD7CB72002C9AD18FFBA37`
+
+Caduca el 6 de noviembre de 2027. Ese thumbprint es el único que la limpieza posterior puede retirar.
+
+## Si Windows rechaza el registro
+
+| Código | Qué significa | Qué no hace el script |
+| --- | --- | --- |
+| `0x80073CFF` | La directiva bloquea el sideloading | No activa el modo de desarrollador ni cambia `AllowAllTrustedApps` |
+| `0x800B0109` | La cadena del certificado no es de confianza | No copia el certificado a `Trusted Root` |
+| Texto que pida modo de desarrollador | Windows lo menciona de forma explícita | No lo activa; haría falta otra autorización |
+
+El certificado público puede haber quedado importado aunque el paquete no. En ese caso el propio script indica el comando de limpieza y el thumbprint.
+
+## Dónde quedan los trabajos
+
+La tarea escribe en la carpeta local del paquete:
+
+```powershell
+$family = (Get-AppxPackage -Name Neobash.PrintBridge.VirtualPrinter).PackageFamilyName
+Get-ChildItem "$env:LOCALAPPDATA\Packages\$family\LocalState\Neobash\PrintBridge" -Recurse
+```
+
+Cada trabajo está en `Jobs\{id}\` con `document.oxps`, `metadata.json` y, si falló, `error.txt`. El registro de la tarea está en `Logs\task.log`.
+
+Esos archivos pueden contener documentos confidenciales. Permanecen en el perfil de la cuenta y no deben copiarse al repositorio.
+
+## Actualizar sin crear otra impresora
+
+1. Incrementar `NpbPackageVersion` en `src/Windows/Directory.Build.props`.
+2. Poner la misma versión en `Identity` de `src/Windows/VirtualPrinter/Package.appxmanifest`.
+3. No cambiar `Name`, `Publisher` ni el certificado firmante.
+4. Volver a compilar. `scripts\poc\build.ps1` firma con el PFX y vuelve a exportar el `.cer` público; no lo importa.
+5. Instalar con el mismo comando autorizado. Windows reemplaza la misma identidad.
+
+Si el certificado firmante cambiara, primero hay que retirar el thumbprint anterior con la limpieza de abajo. El script no sustituye un certificado distinto.
+
+## Desinstalar solo esta POC
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\uninstall.ps1
+```
+
+Ese comando llama a `Remove-AppxPackage` solo si el nombre es exactamente `Neobash.PrintBridge.VirtualPrinter`. No elimina certificados, no llama a `Remove-Printer` y no cambia otras colas. Windows retira `NPB - Prueba Virtual` al quitar el paquete. Si la predeterminada era otra impresora y Windows la cambia, el script intenta restaurarla.
+
+Para retirar también el certificado público, en una consola elevada:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\uninstall.ps1 -RemoveTrustedCertificate
+```
+
+La limpieza solo borra `Cert:\LocalMachine\TrustedPeople\70C7483FE4B6ECAC9FAD7CB72002C9AD18FFBA37`, y únicamente si ese thumbprint coincide con `local-certs\npb-poc.cer` y con `local-certs\npb-poc.thumbprint.txt`. No recorre el almacén por el nombre `CN=Neobash Print Bridge POC` y no toca `Root`, `CA`, `My` ni los almacenes de la cuenta.
+
+Conviene volver a listar las impresoras y confirmar que las colas físicas y del sistema siguen presentes.
+
+## Riesgos de la primera instalación
+
+- La confianza en `LocalMachine\TrustedPeople` vale para todo el equipo mientras ese certificado siga ahí. Quien posea el PFX podría firmar otro paquete que este equipo acepte. El PFX permanece en `local-certs\`, fuera de Git.
+- El certificado no entra en `Trusted Root`. No debe usarse como raíz general. Authenticode puede seguir mostrando una raíz no confiable; el sideloading de MSIX usa `TrustedPeople`.
+- El paquete se registra para la cuenta que ejecuta el comando elevado. Conviene que sea la misma cuenta que imprime.
+- `Add-AppxPackage` puede hacer que Windows cambie la impresora predeterminada. El script intenta restaurarla y avisa si no lo consigue.
+- La cola nueva es virtual. El script considera fallo que aparezca o desaparezca cualquier otra impresora, o que cambie su controlador o su puerto.
+- La aplicación empaquetada declara `runFullTrust`, igual que el ejemplo de Print Support App. No declara red ni acceso amplio al sistema de archivos.
+- Los trabajos capturados después pueden contener documentos de la cuenta. No forman parte del repositorio.
+- Si el registro falla a mitad de camino, el certificado puede quedar instalado y el paquete no. La limpieza es el comando elevado con `-RemoveTrustedCertificate`.
+- Esta página no demuestra que la cola reciba un trabajo. Esa comprobación sigue pendiente después de instalar.

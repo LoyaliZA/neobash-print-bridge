@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:printsupport2="http://schemas.microsoft.com/appx/manifest/printsupport/windows10/2"
+  IgnorableNamespaces="uap uap10 rescap printsupport2">
+
+  <Identity
+    Name="Neobash.PrintBridge.VirtualPrinter"
+    Publisher="CN=Neobash Print Bridge POC"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>Neobash Print Bridge</DisplayName>
+    <PublisherDisplayName>Neobash Print Bridge</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.26100.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="es-ES" />
+  </Resources>
+
+  <Applications>
+    <Application
+      Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$"
+      uap10:SupportsMultipleInstances="true">
+      <uap:VisualElements
+        DisplayName="Neobash Print Bridge"
+        Description="Impresora virtual de prueba de Neobash Print Bridge"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <printsupport2:Extension Category="windows.printSupportVirtualPrinterWorkflow" EntryPoint="Neobash.PrintBridge.VirtualPrinter.Tasks.VirtualPrinterBackgroundTask">
+          <printsupport2:PrintSupportVirtualPrinter
+            DisplayName="NPB - Prueba Virtual"
+            PrinterUri="neobash-print-bridge:npb-prueba-virtual"
+            PreferredInputFormat="application/oxps"
+            PdcFile="Config\NpbPruebaVirtual.pdc.xml" />
+        </printsupport2:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Extensions>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>WinRT.Host.dll</Path>
+        <ActivatableClass ActivatableClassId="Neobash.PrintBridge.VirtualPrinter.Tasks.VirtualPrinterBackgroundTask" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+  </Extensions>
+</Package>

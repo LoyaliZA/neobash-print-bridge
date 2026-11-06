@@ -475,6 +475,9 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 
+# Certificados locales de la POC. No se versionan.
+local-certs/
+
 # Windows shortcuts
 *.lnk
 

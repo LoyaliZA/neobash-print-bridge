@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <NpbPackageName>Neobash.PrintBridge.VirtualPrinter</NpbPackageName>
+    <NpbPackagePublisher>CN=Neobash Print Bridge POC</NpbPackagePublisher>
+    <NpbPackagePublisherDisplayName>Neobash Print Bridge</NpbPackagePublisherDisplayName>
+    <NpbPackageVersion>1.0.0.0</NpbPackageVersion>
+    <NpbPrinterDisplayName>NPB - Prueba Virtual</NpbPrinterDisplayName>
+    <NpbPrinterUri>neobash-print-bridge:npb-prueba-virtual</NpbPrinterUri>
+  </PropertyGroup>
+</Project>
