@@ -151,4 +151,4 @@ Conviene volver a listar las impresoras y confirmar que las colas físicas y del
 - La aplicación empaquetada declara `runFullTrust`, igual que el ejemplo de Print Support App. No declara red ni acceso amplio al sistema de archivos.
 - Los trabajos capturados después pueden contener documentos de la cuenta. No forman parte del repositorio.
 - Si el registro falla a mitad de camino, el certificado puede quedar instalado y el paquete no. La limpieza es el comando elevado con `-RemoveTrustedCertificate`.
-- Esta página no demuestra que la cola reciba un trabajo. Esa comprobación sigue pendiente después de instalar.
+- La captura desde Bloc de notas ya quedó demostrada. Esta página no repite esa prueba. Siguen abiertos la desinstalación del paquete y el evento 307.

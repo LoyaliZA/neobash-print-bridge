@@ -4,6 +4,7 @@
     <Project Path="src/Agent/Neobash.PrintBridge.Agent.csproj" />
   </Folder>
   <Folder Name="/src/Windows/">
+    <Project Path="src/Windows/Desktop/Neobash.PrintBridge.Desktop.csproj" />
     <Project Path="src/Windows/VirtualPrinter/Neobash.PrintBridge.VirtualPrinter.csproj" />
     <Project Path="src/Windows/VirtualPrinter.Tasks/Neobash.PrintBridge.VirtualPrinter.Tasks.csproj" />
   </Folder>

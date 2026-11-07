@@ -2,9 +2,9 @@
 
 ## Qué quedó construido
 
-Un paquete MSIX de Print Support App v4 que declara una sola cola, `NPB - Prueba Virtual`, una extensión de impresión y una tarea que persiste el flujo recibido. La versión `1.0.0.0` está instalada con estado Ok y el servicio de cola activo, pero Windows no creó la impresora. `1.0.1.0` conserva el nombre, el Publisher y el certificado firmante, y queda lista para actualizar sin desinstalar la anterior.
+Un paquete MSIX de Print Support App v4 que declara una sola cola, `NPB - Prueba Virtual`, una extensión de impresión y una tarea que persiste el flujo recibido. `1.0.0.0` quedó registrada y no creó la cola: el nombre visible era un texto literal y faltaba la extensión de impresión. `1.0.1.0` conserva el nombre, el Publisher y el certificado. Con esa versión la cola quedó registrada.
 
-La actualización no forma parte de la compilación. Hasta ejecutarla con autorización no hay evidencia de que la cola exista ni de un trabajo real procedente de Bloc de notas u otra aplicación. En Windows 11 el sideloading de un MSIX firmado no exige activar el modo de desarrollador.
+La captura ya está demostrada: tres trabajos independientes desde Bloc de notas, documento OXPS, metadatos, cierre comunicado a Windows, cola despejada e impresora predeterminada conservada. La desinstalación del paquete y el evento 307 del servicio de impresión siguen abiertos. En Windows 11 el sideloading de un MSIX firmado no exige activar el modo de desarrollador.
 
 ## Compilación
 
@@ -47,20 +47,19 @@ Cubren el almacén inyectable, la ausencia de sobrescritura, tres capturas indep
 
 La prueba de límite OpenXPS comprueba lo contrario de una validación: un buffer que empieza por `PK` se guarda como bytes opacos y los metadatos no afirman que el documento sea OpenXPS válido. Esta POC no incluye un validador OXPS.
 
-Estas pruebas no hablan con el spooler y no demuestran que Windows haya entregado un trabajo.
+Estas pruebas no hablan con el spooler. La entrega real de Windows quedó en la comprobación manual de abajo.
 
-## Pruebas manuales pendientes
-
-No se ejecutó ninguna. No deben marcarse como aprobadas.
+## Pruebas manuales
 
 | Prueba | Qué comprobar | Estado |
 | --- | --- | --- |
-| A. Registro | `NPB - Prueba Virtual` aparece en Configuración, Impresoras y escáneres | Pendiente |
-| B. Selector | La cola aparece en el diálogo de impresión | Pendiente |
-| C. Recepción | Imprimir desde Bloc de notas crea un archivo real en la carpeta del paquete | Pendiente |
-| D. Persistencia | El archivo tiene contenido, el formato declarado es `application/oxps` y `metadata.json` coincide | Pendiente |
-| E. Tres trabajos | Tres impresiones crean tres directorios distintos | Pendiente |
+| A. Registro | `NPB - Prueba Virtual` aparece en Configuración, Impresoras y escáneres | Demostrada |
+| B. Selector | La cola aparece en el diálogo de impresión | Demostrada |
+| C. Recepción | Imprimir desde Bloc de notas crea un archivo real en la carpeta del paquete | Demostrada |
+| D. Persistencia | El archivo tiene contenido, el formato declarado es `application/oxps` y `metadata.json` coincide | Demostrada |
+| E. Tres trabajos | Tres impresiones crean tres directorios distintos | Demostrada |
 | F. Limpieza | Desinstalar solo el paquete `Neobash.PrintBridge.VirtualPrinter` y comprobar que las demás impresoras siguen igual | Pendiente |
+| G. Evento 307 | Lectura del evento 307 del servicio de impresión | Pendiente |
 
 La impresora predeterminada no debe cambiar en ningún paso.
 
@@ -74,4 +73,4 @@ La impresora predeterminada no debe cambiar en ningún paso.
 
 ## Limitación principal
 
-El criterio de éxito —que Windows reconozca la cola y que un documento convencional produzca una captura— sigue pendiente de la instalación autorizada y de las pruebas manuales. El modo de desarrollador no es un requisito previo. El procedimiento está en [installation.md](installation.md).
+La captura local quedó demostrada. Siguen abiertos la desinstalación del paquete y el evento 307. La impresión física pertenece a A1 y no está aprobada. El modo de desarrollador no es un requisito previo. El procedimiento de instalación está en [installation.md](installation.md).
