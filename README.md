@@ -25,7 +25,7 @@ Eso ejecuta las pruebas del almacén, genera el MSIX y lo firma. También export
 
 El paquete firmado aparece en:
 
-`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64_Test\`
+`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64_Test\`
 
 ## Instalación
 

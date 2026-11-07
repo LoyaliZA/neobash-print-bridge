@@ -2,7 +2,7 @@
 
 ## Decisión
 
-La impresora virtual es una Print Support App v4. Windows instala la cola al registrar el paquete MSIX y activa una tarea en segundo plano cuando una aplicación imprime. El contrato es `windows.printSupportVirtualPrinterWorkflow`.
+La impresora virtual es una Print Support App v4. Windows instala la cola al registrar el paquete MSIX y activa una tarea en segundo plano cuando una aplicación imprime. Los contratos son `windows.printSupportVirtualPrinterWorkflow` y `windows.printSupportExtension`. Sin el segundo, la instalación puede terminar en estado Ok y fallar al usar la cola. El nombre visible tiene que ser un recurso PRI: un texto literal también deja el paquete en estado Ok y Windows no crea la impresora.
 
 No se usa `Windows.Devices.Printers.VirtualPrinter`. En el ejemplo oficial de Microsoft esas APIs de alta y baja dinámica siguen desactivadas con `VIRTUAL_PRINTER_DISABLED` porque la proyección de .NET no las expone de forma utilizable. Crear un sustituto simulado no registraría una cola real.
 
@@ -12,6 +12,7 @@ Tampoco se instalan controladores V3 o V4 ni se activa TESTSIGNING. El registro 
 flowchart LR
   appCliente[Aplicacion convencional] --> cola["Cola NPB - Prueba Virtual"]
   cola --> spooler[Print Spooler]
+  spooler --> extension[PrintSupportExtensionBackgroundTask]
   spooler --> tarea[VirtualPrinterBackgroundTask]
   tarea --> almacen[JobCaptureStore]
   almacen --> localState["LocalState/Neobash/PrintBridge/Jobs"]
@@ -32,7 +33,7 @@ flowchart LR
 
 Hay una sola declaración `PrintSupportVirtualPrinter`:
 
-- Nombre visible: `NPB - Prueba Virtual`
+- Nombre visible: `NPB - Prueba Virtual`, publicado como `ms-resource:PrintSupportVirtualPrinterDisplayName`. El texto vive en `Strings/es-ES/Resources.resw` y en `Strings/en-US/Resources.resw`, porque el índice PRI fusionado usa `en-US` como idioma de reserva y el paquete declara `es-ES`. Un nombre literal deja el paquete instalado y no crea la cola.
 - URI estable: `neobash-print-bridge:npb-prueba-virtual`
 - Formato preferido: `application/oxps`
 - Sin `OutputFileTypes`, para que Windows entregue el trabajo sin un diálogo de guardar archivo
@@ -46,9 +47,20 @@ Permanecen fijos entre compilaciones:
 - Nombre del paquete: `Neobash.PrintBridge.VirtualPrinter`
 - Publisher: `CN=Neobash Print Bridge POC`
 
-La versión inicial es `1.0.0.0`. Vive en `src/Windows/Directory.Build.props` como `NpbPackageVersion` y debe coincidir con `Package.appxmanifest`. La compilación se detiene si difieren.
+La versión de esta corrección es `1.0.1.0`. Vive en `src/Windows/Directory.Build.props` como `NpbPackageVersion` y debe coincidir con `Package.appxmanifest`. La compilación se detiene si difieren. `1.0.0.0` conserva el mismo nombre, Publisher y certificado, y se reemplaza por actualización.
 
 Para reemplazar una instalación posterior se incrementa solo esa versión, se conserva el mismo certificado y se instala el paquete nuevo sobre el anterior. Cambiar el nombre o el Publisher crearía otra identidad y podría dejar otra cola.
+
+## Extensión de impresión
+
+`PrintSupportExtensionBackgroundTask` es la tarea de `windows.printSupportExtension`. Windows la activa al preparar el ticket de la cola. La tarea toma el aplazamiento, se suscribe a `PrintTicketValidationRequested` y después llama a `Start`.
+
+- Una cancelación cierra el aplazamiento si no hay un controlador en curso. Si lo hay, el controlador termina y entonces cierra el aplazamiento.
+- El aplazamiento del evento se completa una sola vez, también cuando la sesión ya fue cancelada.
+- El ticket se valida contra las opciones del PDC: A4 o carta, vertical u horizontal, color o monocromo. Una característica ausente conserva el valor predeterminado del PDC. Una opción fuera de esa lista deja el ticket como no válido. Las características que Windows añade y que el PDC no declara no invalidan el ticket.
+- La clase queda registrada en `windows.activatableClass.inProcessServer`, con `WinRT.Host.dll` como host. El espacio de nombres coincide con el nombre del ensamblado para que el host lo encuentre junto a esa DLL.
+
+El componente WinRT se publica dependiente del runtime de .NET (`SelfContained` en falso). `WinRT.Host.dll` no puede activar un componente autocontenido. `WindowsAppSDKSelfContained` sigue en verdadero y solo incluye el Windows App SDK; no sustituye al runtime de .NET.
 
 ## Tarea de impresión
 

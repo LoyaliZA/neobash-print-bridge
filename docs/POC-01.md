@@ -2,9 +2,9 @@
 
 ## Qué quedó construido
 
-Un paquete MSIX de Print Support App v4 que declara una sola cola, `NPB - Prueba Virtual`, y una tarea que persiste el flujo recibido. El paquete se compiló y se firmó con un certificado de prueba que no está en el almacén de confianza.
+Un paquete MSIX de Print Support App v4 que declara una sola cola, `NPB - Prueba Virtual`, una extensión de impresión y una tarea que persiste el flujo recibido. La versión `1.0.0.0` está instalada con estado Ok y el servicio de cola activo, pero Windows no creó la impresora. `1.0.1.0` conserva el nombre, el Publisher y el certificado firmante, y queda lista para actualizar sin desinstalar la anterior.
 
-Windows todavía no tiene registrada la cola. La POC queda autorizada para iniciar la prueba de instalación, no para dar por válida la captura. En Windows 11 el sideloading de un MSIX firmado no exige activar el modo de desarrollador. La confianza pendiente es el certificado público en `Cert:\LocalMachine\TrustedPeople`, con elevación y aprobación explícita. Hasta esa instalación no hay evidencia de un trabajo real procedente de Bloc de notas u otra aplicación.
+La actualización no forma parte de la compilación. Hasta ejecutarla con autorización no hay evidencia de que la cola exista ni de un trabajo real procedente de Bloc de notas u otra aplicación. En Windows 11 el sideloading de un MSIX firmado no exige activar el modo de desarrollador.
 
 ## Compilación
 
@@ -23,13 +23,15 @@ Advertencias que no impiden el paquete:
 
 MSBuild de Visual Studio Build Tools no pudo resolver `Microsoft.NET.Sdk`. Por eso el empaquetado usa `dotnet msbuild`.
 
+`1.0.0.0` se instaló con estado Ok y no creó la cola: `DisplayName` era un texto literal y faltaba `windows.printSupportExtension`. `1.0.1.0` corrige esos dos puntos, conserva la identidad y el certificado, y no se instala desde la compilación.
+
 El MSIX generado y firmado es:
 
-`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64_Test\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64.msix`
+`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64_Test\Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64.msix`
 
-Tamaño aproximado: 54 MB, porque incluye el runtime de Windows App SDK. La firma tiene como firmante `CN=Neobash Print Bridge POC`, thumbprint `70C7483FE4B6ECAC9FAD7CB72002C9AD18FFBA37`. `Get-AuthenticodeSignature` informa que la cadena termina en una raíz no confiable. El paquete no se volvió a compilar ni a firmar al corregir el procedimiento. La confianza usa el certificado público exportado desde esa firma, no el PFX, y el almacén previsto es `Cert:\LocalMachine\TrustedPeople`.
+El paquete incluye el runtime de Windows App SDK. La firma tiene como firmante `CN=Neobash Print Bridge POC`, thumbprint `70C7483FE4B6ECAC9FAD7CB72002C9AD18FFBA37`, el mismo de `1.0.0.0`. `Get-AuthenticodeSignature` puede informar que la cadena termina en una raíz no confiable; el sideloading usa el certificado público ya confiado en `Cert:\LocalMachine\TrustedPeople`. La compilación no vuelve a importarlo.
 
-El manifiesto empaquetado contiene una sola impresora virtual, formato `application/oxps`, sin `OutputFileTypes`, con `runFullTrust`, `WinRT.Host.dll` y el winmd de la tarea.
+El manifiesto empaquetado contiene una sola impresora virtual. Su nombre es el recurso `ms-resource:PrintSupportVirtualPrinterDisplayName`, cuyo valor resuelto es `NPB - Prueba Virtual`. El formato es `application/oxps`, sin `OutputFileTypes`, con `runFullTrust`, `windows.printSupportExtension`, `WinRT.Host.dll` y el winmd de las dos tareas. El componente WinRT sigue dependiendo del runtime de .NET instalado en el equipo; el paquete no incluye `coreclr.dll` ni `hostfxr.dll`.
 
 ## Pruebas automatizadas
 
@@ -39,9 +41,9 @@ Comando:
 dotnet test tests\UnitTests\Neobash.PrintBridge.Tests.csproj
 ```
 
-Resultado: 15 pruebas superadas, 0 errores, 0 omisiones.
+Resultado: 30 pruebas superadas, 0 errores, 0 omisiones.
 
-Cubren el almacén inyectable, la ausencia de sobrescritura, tres capturas independientes, identificadores inseguros, metadatos, cancelación, el cierre único del trabajo y la identidad estable del manifiesto.
+Cubren el almacén inyectable, la ausencia de sobrescritura, tres capturas independientes, identificadores inseguros, metadatos, cancelación, el cierre único del trabajo, la validación del PrintTicket contra el PDC y el manifiesto empaquetado: el nombre es un recurso que resuelve a `NPB - Prueba Virtual`, `resources.pri` va dentro del MSIX, `printSupportExtension` está declarada, las clases WinRT existen en el winmd y el PDC referenciado está en el paquete.
 
 La prueba de límite OpenXPS comprueba lo contrario de una validación: un buffer que empieza por `PK` se guarda como bytes opacos y los metadatos no afirman que el documento sea OpenXPS válido. Esta POC no incluye un validador OXPS.
 

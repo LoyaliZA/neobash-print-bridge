@@ -2,9 +2,11 @@
 
 La compilación no instala el paquete ni modifica la confianza del equipo. Los cambios de sistema quedan en un comando aparte, con aprobación explícita y una consola elevada.
 
-El MSIX ya firmado se conserva. No hace falta recompilarlo para este procedimiento:
+El MSIX que debe usarse es el de la versión `1.0.1.0`:
 
-`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64_Test\Neobash.PrintBridge.VirtualPrinter_1.0.0.0_x64.msix`
+`src\Windows\VirtualPrinter\AppPackages\Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64_Test\Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64.msix`
+
+`1.0.0.0` puede seguir instalada. Este procedimiento no la desinstala y no registra la versión nueva hasta que se autorice el comando elevado.
 
 El firmante es `CN=Neobash Print Bridge POC`. En Windows 11, un MSIX firmado puede registrarse por sideloading cuando ese certificado público está en `Cert:\LocalMachine\TrustedPeople`. El modo de desarrollador no forma parte del intento inicial y este procedimiento no lo activa.
 
@@ -30,7 +32,7 @@ Ese comando:
 
 1. Elige el MSIX de mayor versión de `Neobash.PrintBridge.VirtualPrinter`.
 2. Rechaza una firma dañada, ausente o de otro firmante.
-3. Lee `AppxManifest.xml` y exige una sola cola, `NPB - Prueba Virtual`, formato `application/oxps`, sin `OutputFileTypes`, y la capacidad `runFullTrust`.
+3. Lee `AppxManifest.xml` y `resources.pri`. Exige una sola cola cuyo recurso resuelva a `NPB - Prueba Virtual`, formato `application/oxps`, sin `OutputFileTypes`, `windows.printSupportExtension` y la capacidad `runFullTrust`.
 4. Comprueba que el PFX local, si existe, tiene el mismo thumbprint que la firma. No lo importa.
 5. Exporta el certificado público a `local-certs\npb-poc.cer` desde el firmante del MSIX y registra el thumbprint en `local-certs\npb-poc.thumbprint.txt`.
 
@@ -84,13 +86,40 @@ Cada trabajo está en `Jobs\{id}\` con `document.oxps`, `metadata.json` y, si fa
 
 Esos archivos pueden contener documentos confidenciales. Permanecen en el perfil de la cuenta y no deben copiarse al repositorio.
 
-## Actualizar sin crear otra impresora
+## Actualizar 1.0.0.0 a 1.0.1.0
 
-1. Incrementar `NpbPackageVersion` en `src/Windows/Directory.Build.props`.
-2. Poner la misma versión en `Identity` de `src/Windows/VirtualPrinter/Package.appxmanifest`.
-3. No cambiar `Name`, `Publisher` ni el certificado firmante.
-4. Volver a compilar. `scripts\poc\build.ps1` firma con el PFX y vuelve a exportar el `.cer` público; no lo importa.
-5. Instalar con el mismo comando autorizado. Windows reemplaza la misma identidad.
+`1.0.0.0` queda en estado Ok y no crea `NPB - Prueba Virtual` porque el nombre de la cola está escrito como texto literal y el manifiesto no declara `windows.printSupportExtension`. Windows acepta ese paquete y el administrador de impresión no crea la cola. `1.0.1.0` conserva el nombre `Neobash.PrintBridge.VirtualPrinter`, el Publisher `CN=Neobash Print Bridge POC` y el mismo certificado. El nombre visible pasa a `ms-resource:PrintSupportVirtualPrinterDisplayName` y la extensión queda registrada.
+
+No desinstalar `1.0.0.0` antes de actualizar. Quitar el paquete puede dejar un puerto del monitor virtual y, al volver a instalar, Windows reutiliza ese registro viejo. La actualización sustituye la misma identidad.
+
+La compilación y la firma no instalan nada. Cuando se autorice, en una consola elevada de la misma cuenta que imprime:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\install.ps1 -ConfirmSystemChanges
+```
+
+El script elige el MSIX de mayor versión. Si encuentra `1.0.0.0`, ejecuta `Add-AppxPackage` sobre `1.0.1.0` y no llama a `Remove-AppxPackage`, `Remove-Printer` ni edita el registro. Después comprueba que la única cola nueva es `NPB - Prueba Virtual` y que las demás conservan controlador y puerto.
+
+La retirada del nombre completo de `1.0.0.0` es normal al sustituirlo por `1.0.1.0`. La validación permite únicamente versiones anteriores con el mismo nombre, arquitectura x64, recurso vacío y PublisherId `81d0rh61c409w`, y exige que el paquete de destino esté presente. Rechaza retiradas, incorporaciones y cambios de versión de paquetes ajenos, así como una sustitución por otra identidad o una versión inferior.
+
+La comprobación posterior exige un único paquete con el nombre y Publisher previstos, la versión exacta del MSIX seleccionado (`1.0.1.0` en esta corrección) y estado `Ok`. Consulta por separado las colas reales de Windows incluso si falla la validación MSIX. Los errores se presentan como fallos MSIX o de aprovisionamiento/integridad de impresoras; que el paquete esté en estado `Ok` no acredita que exista la cola. Los errores de consulta tampoco se interpretan como ausencia.
+
+Diagnóstico de solo lectura realizado el 7 de noviembre de 2026: `Neobash.PrintBridge.VirtualPrinter_1.0.1.0_x64__81d0rh61c409w` registrado con estado `Ok`, Spooler activo y una cola `NPB - Prueba Virtual` con `Microsoft Virtual Print Class Driver`. No se ejecutó una instalación ni una desinstalación para comprobarlo. Sin una instantánea previa al intento original, esta lectura no demuestra que los paquetes o impresoras ajenos permanecieran sin cambios durante aquel intento.
+
+Pruebas automatizadas con instantáneas sintéticas, sin modificar Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\Poc\PackageUpgrade.Tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\Poc\InstallFailureGuidance.Tests.ps1
+```
+
+Si el paquete nuevo queda registrado y la cola no aparece, el script se detiene y ejecuta un diagnóstico de solo lectura:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\poc\diagnose-queue.ps1
+```
+
+Ese diagnóstico consulta el servicio de cola, el paquete de esta cuenta, la impresora `NPB - Prueba Virtual` y los nombres de puerto bajo `HKLM\SYSTEM\CurrentControlSet\Control\Print\Monitors\Virtual Port Monitor\Ports` que coinciden con esta POC. No borra claves ni impresoras. Si aparece un puerto antiguo y la cola sigue ausente, Windows conservó el registro de la instalación anterior. La limpieza de esa clave no forma parte de este paso: primero se revisa el diagnóstico y solo después, con otra autorización, se decide si hace falta reiniciar y retirar ese puerto. No se hace esa limpieza para probar `1.0.1.0`.
 
 Si el certificado firmante cambiara, primero hay que retirar el thumbprint anterior con la limpieza de abajo. El script no sustituye un certificado distinto.
 

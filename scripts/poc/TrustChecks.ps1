@@ -4,6 +4,10 @@ $script:PocPackageName = "Neobash.PrintBridge.VirtualPrinter"
 $script:PocPrinterName = "NPB - Prueba Virtual"
 $script:PocPrinterUri = "neobash-print-bridge:npb-prueba-virtual"
 $script:PocInputFormat = "application/oxps"
+$script:PocPrinterResourceName = "PrintSupportVirtualPrinterDisplayName"
+$script:PocPrinterResourceReference = "ms-resource:$($script:PocPrinterResourceName)"
+$script:PocExtensionClass = "Neobash.PrintBridge.VirtualPrinter.Tasks.PrintSupportExtensionBackgroundTask"
+$script:PocVirtualPrinterClass = "Neobash.PrintBridge.VirtualPrinter.Tasks.VirtualPrinterBackgroundTask"
 $script:PocTrustedStore = "Cert:\LocalMachine\TrustedPeople"
 $script:PocRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 
@@ -172,6 +176,84 @@ function Get-PocRecordedThumbprint {
     }
 }
 
+function Get-PocMakePriPath {
+    $roots = @(
+        "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
+        "$env:ProgramFiles\Windows Kits\10\bin"
+    )
+    $found = @(foreach ($root in $roots) {
+            if (Test-Path -LiteralPath $root) {
+                Get-ChildItem -LiteralPath $root -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -match '\\x64\\makepri\.exe$' }
+            }
+        })
+    if ($found.Count -eq 0) {
+        throw "No se encontró makepri.exe del Windows SDK. No se instaló nada."
+    }
+
+    return @($found | Sort-Object FullName -Descending | Select-Object -First 1)[0].FullName
+}
+
+function Get-PocPriCandidate {
+    param(
+        [Parameter(Mandatory = $true)]$Resource,
+        [Parameter(Mandatory = $true)][string]$Language
+    )
+
+    $found = @($Resource.SelectNodes("Candidate[@type='String']") | Where-Object {
+            $qualifier = $_.SelectSingleNode("QualifierSet/Qualifier[@name='Language']")
+            $qualifier -and $qualifier.GetAttribute("value") -eq $Language
+        })
+    if ($found.Count -ne 1) {
+        throw "resources.pri no tiene un candidato único '$Language' para $($script:PocPrinterResourceName)."
+    }
+
+    return $found[0].SelectSingleNode("Value").InnerText
+}
+
+function Resolve-PocPackagedPrinterName {
+    param([Parameter(Mandatory = $true)]$Zip)
+
+    $entry = $Zip.GetEntry("resources.pri")
+    if (-not $entry) {
+        throw "El paquete no contiene resources.pri."
+    }
+
+    $directory = Join-Path ([System.IO.Path]::GetTempPath()) ("npb-pri-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $directory | Out-Null
+    $pri = Join-Path $directory "resources.pri"
+    $dump = Join-Path $directory "dump.xml"
+    try {
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $pri)
+        $makePri = Get-PocMakePriPath
+        & $makePri dump /if $pri /of $dump /dt Detailed | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "makepri no pudo leer resources.pri. No se instaló nada."
+        }
+
+        $document = New-Object System.Xml.XmlDocument
+        $document.Load($dump)
+        $defaultLanguage = @($document.SelectNodes("//Qualifier[@name='Language']") |
+            Sort-Object { [double]$_.GetAttribute("scoreAsDefault") } -Descending |
+            Select-Object -First 1)[0].GetAttribute("value")
+        $resource = $document.SelectSingleNode("//NamedResource[@name='$($script:PocPrinterResourceName)']")
+        if (-not $resource) {
+            throw "resources.pri no contiene $($script:PocPrinterResourceName)."
+        }
+
+        $spanish = Get-PocPriCandidate -Resource $resource -Language "ES-ES"
+        $fallback = Get-PocPriCandidate -Resource $resource -Language $defaultLanguage
+        if ($spanish -ne $script:PocPrinterName -or $fallback -ne $script:PocPrinterName) {
+            throw "El recurso no resuelve a $($script:PocPrinterName). es-ES='$spanish'; predeterminado ($defaultLanguage)='$fallback'."
+        }
+
+        return $fallback
+    }
+    finally {
+        Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Read-PocPackageContent {
     param([Parameter(Mandatory = $true)][string]$MsixPath)
 
@@ -203,6 +285,7 @@ function Read-PocPackageContent {
         $namespaces = New-Object System.Xml.XmlNamespaceManager($document.NameTable)
         $namespaces.AddNamespace("f", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
         $namespaces.AddNamespace("r", "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities")
+        $namespaces.AddNamespace("ps", "http://schemas.microsoft.com/appx/manifest/printsupport/windows10")
         $namespaces.AddNamespace("ps2", "http://schemas.microsoft.com/appx/manifest/printsupport/windows10/2")
 
         $identity = $document.SelectSingleNode("/f:Package/f:Identity", $namespaces)
@@ -224,8 +307,25 @@ function Read-PocPackageContent {
             throw "El paquete declara $($printers.Count) impresoras virtuales. Esta POC exige exactamente una."
         }
         $printer = $printers[0]
-        if ($printer.GetAttribute("DisplayName") -ne $script:PocPrinterName) {
-            throw "La cola declarada es '$($printer.GetAttribute("DisplayName"))'."
+        if ($printer.GetAttribute("DisplayName") -ne $script:PocPrinterResourceReference) {
+            throw "DisplayName debe ser $($script:PocPrinterResourceReference) y es '$($printer.GetAttribute("DisplayName"))'."
+        }
+        if (-not $zip.GetEntry("resources.pri")) {
+            throw "El paquete no contiene resources.pri."
+        }
+        $resolvedName = Resolve-PocPackagedPrinterName -Zip $zip
+        if ($resolvedName -ne $script:PocPrinterName) {
+            throw "El recurso de la cola resuelve a '$resolvedName'."
+        }
+        $extension = $document.SelectSingleNode("//ps:Extension[@Category='windows.printSupportExtension']", $namespaces)
+        if (-not $extension -or $extension.GetAttribute("EntryPoint") -ne $script:PocExtensionClass) {
+            throw "El paquete no registra windows.printSupportExtension en $($script:PocExtensionClass)."
+        }
+        $classIds = @($document.SelectNodes("//f:ActivatableClass", $namespaces) | ForEach-Object { $_.GetAttribute("ActivatableClassId") })
+        foreach ($classId in @($script:PocExtensionClass, $script:PocVirtualPrinterClass)) {
+            if ($classIds -notcontains $classId) {
+                throw "El manifiesto empaquetado no activa $classId."
+            }
         }
         if ($printer.GetAttribute("PrinterUri") -ne $script:PocPrinterUri) {
             throw "La URI de la cola no es $script:PocPrinterUri."
@@ -252,7 +352,7 @@ function Read-PocPackageContent {
             Name      = $identity.GetAttribute("Name")
             Publisher = $identity.GetAttribute("Publisher")
             Version   = $identity.GetAttribute("Version")
-            Printer   = $printer.GetAttribute("DisplayName")
+            Printer   = $resolvedName
         }
     }
     finally {
@@ -261,7 +361,7 @@ function Read-PocPackageContent {
 }
 
 function Get-PocPrinterSnapshot {
-    return @(Get-Printer | Select-Object Name, DriverName, PortName)
+    return @(Get-Printer -ErrorAction Stop | Select-Object Name, DriverName, PortName)
 }
 
 function Get-PocDefaultPrinterName {
@@ -465,7 +565,7 @@ function Remove-PocTrustedCertificate {
 }
 
 function Get-PocPackageFullNames {
-    return @(Get-AppxPackage | Select-Object -ExpandProperty PackageFullName)
+    return @(Get-AppxPackage -ErrorAction Stop | Select-Object -ExpandProperty PackageFullName)
 }
 
 function Test-PocPackageDelta {
@@ -479,50 +579,365 @@ function Test-PocPackageDelta {
 
     $removed = @($Before | Where-Object { $_ -notin @($After) })
     $added = @($After | Where-Object { $_ -notin @($Before) })
-    $foreignRemoved = @($removed | Where-Object { $_ -notlike "$($script:PocPackageName)_*" })
-    if ($foreignRemoved.Count -gt 0) {
-        throw "Se retiraron otros paquetes: $($foreignRemoved -join ', ')."
+    # A full name includes version. MSIX normally removes the old full name on update.
+    # Match every other identity component exactly; a name prefix is not sufficient.
+    $target = $null
+    if ($PackageFullName) {
+        $target = ConvertFrom-PocPackageFullName -FullName $PackageFullName
     }
-    if ($Phase -eq "Install" -and $removed.Count -gt 0) {
-        throw "La instalación retiró paquetes: $($removed -join ', ')."
+    foreach ($name in $removed) {
+        $allowed = $false
+        if ($Phase -eq "Uninstall") {
+            $allowed = ($name -eq $PackageFullName)
+        }
+        elseif ($target -and $PackageFullName -in @($After)) {
+            $old = ConvertFrom-PocPackageFullName -FullName $name -AllowForeign
+            $allowed = ($old -and $old.Identity -eq $target.Identity -and $old.Version -lt $target.Version)
+        }
+        if (-not $allowed) {
+            throw "Se retiró o modificó un paquete no autorizado: $name."
+        }
     }
-
-    $foreignAdded = @($added | Where-Object { $_ -notlike "$($script:PocPackageName)_*" })
-    if ($foreignAdded.Count -gt 0) {
-        throw "Se registraron otros paquetes: $($foreignAdded -join ', ')."
+    foreach ($name in $added) {
+        if ($Phase -ne "Install" -or -not $target -or $name -ne $PackageFullName) {
+            throw "Se registró o modificó un paquete no autorizado: $name."
+        }
     }
     if ($Phase -eq "Uninstall" -and $PackageFullName -and $PackageFullName -notin @($removed)) {
         throw "No se retiró el paquete $PackageFullName."
     }
 }
 
+function ConvertFrom-PocPackageFullName {
+    param([string]$FullName, [switch]$AllowForeign)
+
+    $pattern = '^(?<name>[^_]+)_(?<version>\d+\.\d+\.\d+\.\d+)_(?<arch>[^_]+)_(?<resource>[^_]*)_(?<publisher>[^_]+)$'
+    if ($FullName -match $pattern) {
+        $parts = $Matches
+        if ($parts.name -eq $script:PocPackageName -and $parts.arch -eq 'x64' -and
+            $parts.resource -eq '' -and $parts.publisher -eq '81d0rh61c409w') {
+            return [pscustomobject]@{
+                Identity = "$($parts.name)_$($parts.arch)_$($parts.resource)_$($parts.publisher)"
+                Version = [version]$parts.version
+            }
+        }
+    }
+    if (-not $AllowForeign) {
+        throw "Identidad de paquete NPB inesperada: $FullName."
+    }
+}
+
+function Test-PocInstalledPackage {
+    param($Packages, [version]$ExpectedVersion)
+
+    $rows = @($Packages)
+    if ($rows.Count -ne 1) {
+        throw "Se esperaba exactamente un paquete NPB registrado; encontrados: $($rows.Count)."
+    }
+    $package = $rows[0]
+    $identity = ConvertFrom-PocPackageFullName -FullName $package.PackageFullName
+    if ($package.Name -ne $script:PocPackageName -or $package.Publisher -ne $script:PocPublisher) {
+        throw "El nombre o Publisher del paquete registrado no coincide con NPB."
+    }
+    if ([version]$package.Version -ne $ExpectedVersion -or $identity.Version -ne $ExpectedVersion) {
+        throw "Se esperaba NPB $ExpectedVersion; versión registrada: $($package.Version)."
+    }
+    if ([string]$package.Status -ne 'Ok') {
+        throw "El paquete NPB $ExpectedVersion no está en estado Ok: $($package.Status)."
+    }
+    return $package
+}
+
+function Get-PocInstallationValidation {
+    param($PackagesBefore, $PrintersBefore, [version]$ExpectedVersion)
+
+    $packageErrors = New-Object System.Collections.Generic.List[string]
+    $printerErrors = New-Object System.Collections.Generic.List[string]
+    $installed = $null
+    $queue = @()
+    try {
+        $installed = Test-PocInstalledPackage -Packages @(Get-AppxPackage -Name $script:PocPackageName -ErrorAction Stop) -ExpectedVersion $ExpectedVersion
+    }
+    catch { $packageErrors.Add($_.Exception.Message) }
+    # Check foreign deltas even when the target package is missing or unhealthy.
+    try {
+        $fullName = if ($installed) { $installed.PackageFullName } else { $null }
+        Test-PocPackageDelta -Before $PackagesBefore -After (Get-PocPackageFullNames) -Phase Install -PackageFullName $fullName
+    }
+    catch { $packageErrors.Add($_.Exception.Message) }
+    # Always query Windows' actual queues, independently of MSIX validation.
+    try {
+        $printers = @(Get-PocPrinterSnapshot)
+        $queue = @($printers | Where-Object { $_.Name -eq $script:PocPrinterName })
+        if ($queue.Count -ne 1) {
+            $printerErrors.Add("Se esperaba exactamente una cola $($script:PocPrinterName); encontradas: $($queue.Count).")
+        }
+        Test-PocPrinterIntegrity -Before $PrintersBefore -After $printers -Phase Install
+    }
+    catch { $printerErrors.Add($_.Exception.Message) }
+    return [pscustomobject]@{
+        Package = $installed
+        Queue = $queue
+        PackageErrors = @($packageErrors.ToArray())
+        PrinterErrors = @($printerErrors.ToArray())
+    }
+}
+
+function Get-PocHResultParts {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    $number = [int64]$Value
+    if ($number -lt -2147483648L -or $number -gt 4294967295L) {
+        throw "El HRESULT '$Value' queda fuera del rango de 32 bits."
+    }
+
+    $bits = $number -band 4294967295L
+    $signed = $bits
+    if ($signed -gt 2147483647L) {
+        $signed -= 4294967296L
+    }
+
+    return [pscustomobject]@{
+        Hex    = "0x{0:X8}" -f $bits
+        Signed = $signed
+    }
+}
+
+function ConvertTo-PocHResultHex {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    return (Get-PocHResultParts -Value $Value).Hex
+}
+
+function Get-PocExceptionChain {
+    param($Exception)
+
+    $ordered = New-Object System.Collections.Generic.List[object]
+    $pending = New-Object System.Collections.Generic.Queue[object]
+    if ($null -ne $Exception) {
+        $pending.Enqueue($Exception)
+    }
+
+    $guard = 0
+    while ($pending.Count -gt 0 -and $guard -lt 20) {
+        $guard++
+        $current = $pending.Dequeue()
+        $seen = $false
+        foreach ($item in $ordered) {
+            if ([object]::ReferenceEquals($item, $current)) {
+                $seen = $true
+                break
+            }
+        }
+        if ($seen) {
+            continue
+        }
+
+        $ordered.Add($current)
+        $aggregate = $current -as [System.AggregateException]
+        if ($null -ne $aggregate) {
+            foreach ($inner in @($aggregate.InnerExceptions)) {
+                if ($null -ne $inner) {
+                    $pending.Enqueue($inner)
+                }
+            }
+        }
+        elseif ($null -ne $current.InnerException) {
+            $pending.Enqueue($current.InnerException)
+        }
+    }
+
+    return @($ordered.ToArray())
+}
+
+function Get-PocActivityIdValue {
+    param($InputObject)
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    foreach ($name in @("ActivityId", "ActivityID")) {
+        $property = $InputObject.PSObject.Properties[$name]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            return ([string]$property.Value).Trim()
+        }
+    }
+
+    return $null
+}
+
+function Format-PocAppxLogRecord {
+    param($Record)
+
+    if ($null -eq $Record) {
+        return $null
+    }
+
+    $message = [string]$Record.Message
+    if ([string]::IsNullOrWhiteSpace($message)) {
+        $message = [string]$Record
+    }
+
+    $parts = New-Object System.Collections.Generic.List[string]
+    if ($Record.PSObject.Properties["TimeCreated"] -and $Record.TimeCreated) {
+        $parts.Add(([datetime]$Record.TimeCreated).ToString("yyyy-MM-dd HH:mm:ss"))
+    }
+    if ($Record.PSObject.Properties["Id"] -and $null -ne $Record.Id -and -not [string]::IsNullOrWhiteSpace([string]$Record.Id)) {
+        $parts.Add("Id=$($Record.Id)")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($message)) {
+        $parts.Add($message)
+    }
+    if ($parts.Count -eq 0) {
+        return $null
+    }
+
+    return "Registro: $($parts -join ' ')"
+}
+
+function Get-PocInstallFailureLines {
+    param(
+        [Parameter(Mandatory = $true)]$Failure,
+        $AppxLogQuery
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("El registro del paquete no se completó.")
+
+    $exception = $null
+    $detailParts = New-Object System.Collections.Generic.List[string]
+    if ($Failure -is [System.Management.Automation.ErrorRecord]) {
+        $exception = $Failure.Exception
+        if ($Failure.ErrorDetails -and -not [string]::IsNullOrWhiteSpace([string]$Failure.ErrorDetails.Message)) {
+            $detailParts.Add([string]$Failure.ErrorDetails.Message)
+        }
+    }
+    elseif ($Failure -is [System.Exception]) {
+        $exception = $Failure
+    }
+
+    $chain = @(Get-PocExceptionChain -Exception $exception)
+    for ($index = 0; $index -lt $chain.Count; $index++) {
+        $item = $chain[$index]
+        $itemMessage = [string]$item.Message
+        if (-not [string]::IsNullOrWhiteSpace($itemMessage)) {
+            $detailParts.Add($itemMessage)
+        }
+
+        $parts = Get-PocHResultParts -Value $item.HResult
+        $hresultText = "$($parts.Hex) ($($parts.Signed))"
+        if ($index -eq 0) {
+            $lines.Add("Mensaje original: $itemMessage")
+            $lines.Add("HRESULT: $hresultText")
+        }
+        else {
+            $lines.Add("Error interno ($($item.GetType().FullName)): $itemMessage")
+            $lines.Add("HRESULT interno: $hresultText")
+        }
+    }
+
+    if ($chain.Count -eq 0) {
+        $lines.Add("Mensaje original: $Failure")
+    }
+
+    $activityId = $null
+    foreach ($item in $chain) {
+        $activityId = Get-PocActivityIdValue -InputObject $item
+        if ($activityId) {
+            break
+        }
+    }
+    if (-not $activityId) {
+        $activityId = Get-PocActivityIdValue -InputObject $Failure
+    }
+    if (-not $activityId) {
+        $activityPattern = '(?i)\[?ActivityId\]?\s*[:=]?\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
+        foreach ($text in $detailParts) {
+            if ($text -match $activityPattern) {
+                $activityId = $Matches[1]
+                break
+            }
+        }
+    }
+
+    if ($activityId) {
+        $lines.Add("ActivityId: $activityId")
+        $lines.Add("Get-AppxLog -ActivityId $activityId")
+        try {
+            if ($PSBoundParameters.ContainsKey("AppxLogQuery") -and $null -ne $AppxLogQuery) {
+                $records = @(& $AppxLogQuery $activityId)
+            }
+            else {
+                $records = @(Get-AppxLog -ActivityId $activityId)
+            }
+
+            $formattedRecords = @($records | ForEach-Object { Format-PocAppxLogRecord -Record $_ } | Where-Object { $_ })
+            if ($formattedRecords.Count -eq 0) {
+                $lines.Add("Get-AppxLog no devolvió registros para ese ActivityId.")
+            }
+            else {
+                foreach ($formatted in $formattedRecords) {
+                    $lines.Add($formatted)
+                }
+            }
+        }
+        catch {
+            $lines.Add("No se pudieron leer los registros de Get-AppxLog: $($_.Exception.Message)")
+        }
+    }
+
+    $report = $lines -join "`n"
+    if ($report -match "80073CFF") {
+        $lines.Add("Windows bloqueó el sideloading por directiva. No se activó el modo de desarrollador ni se cambió AllowAllTrustedApps.")
+        $lines.Add("Ese error sí justifica revisar, en una autorización aparte, la directiva de aplicaciones de confianza. El modo de desarrollador solo entra si el texto de Windows lo pide de forma explícita.")
+    }
+    elseif ($report -match "800B0109") {
+        $lines.Add("Windows no construyó una cadena de confianza. El certificado no se copió a Trusted Root y el modo de desarrollador sigue sin activarse.")
+        $lines.Add("Cualquier cambio adicional de confianza requiere una autorización distinta.")
+    }
+    elseif ($report -match "modo de desarrollador|Developer Mode|developer mode") {
+        $lines.Add("El mensaje menciona el modo de desarrollador. Este procedimiento no lo activa. Habilitarlo sería otra decisión, posterior a este intento.")
+    }
+    else {
+        $lines.Add("No se aplicó ningún cambio adicional. Conserva este error antes de autorizar otra modificación.")
+    }
+
+    return @($lines.ToArray())
+}
+
 function Write-PocInstallFailureGuidance {
-    param([Parameter(Mandatory = $true)]$Failure)
+    param(
+        [Parameter(Mandatory = $true)]$Failure,
+        $AppxLogQuery
+    )
 
-    $codes = New-Object System.Collections.Generic.List[string]
-    $exception = $Failure.Exception
-    while ($null -ne $exception) {
-        $codes.Add(("0x{0:X8}" -f [uint32]$exception.HResult))
-        $exception = $exception.InnerException
+    try {
+        $parameters = @{ Failure = $Failure }
+        if ($PSBoundParameters.ContainsKey("AppxLogQuery")) {
+            $parameters.AppxLogQuery = $AppxLogQuery
+        }
+        $lines = @(Get-PocInstallFailureLines @parameters)
     }
-    $codeText = ($codes -join ", ")
-    $detail = $Failure.Exception.ToString()
-    Write-Host "El registro del paquete no se completó. Códigos: $codeText"
-    Write-Host $Failure.Exception.Message
+    catch {
+        $message = [string]$Failure
+        if ($Failure -is [System.Management.Automation.ErrorRecord] -and $Failure.Exception) {
+            $message = $Failure.Exception.Message
+        }
+        elseif ($Failure -is [System.Exception]) {
+            $message = $Failure.Message
+        }
 
-    if ($detail -match "80073CFF" -or $codeText -match "80073CFF") {
-        Write-Host "Windows bloqueó el sideloading por directiva. No se activó el modo de desarrollador ni se cambió AllowAllTrustedApps."
-        Write-Host "Ese error sí justifica revisar, en una autorización aparte, la directiva de aplicaciones de confianza. El modo de desarrollador solo entra si el texto de Windows lo pide de forma explícita."
-        return
+        $lines = @(
+            "El registro del paquete no se completó.",
+            "Mensaje original: $message",
+            ("El diagnóstico adicional falló: " + $_.Exception.Message)
+        )
     }
-    if ($detail -match "800B0109" -or $codeText -match "800B0109") {
-        Write-Host "Windows no construyó una cadena de confianza. El certificado no se copió a Trusted Root y el modo de desarrollador sigue sin activarse."
-        Write-Host "Cualquier cambio adicional de confianza requiere una autorización distinta."
-        return
+
+    foreach ($line in $lines) {
+        if (-not [string]::IsNullOrEmpty([string]$line)) {
+            Write-Host $line
+        }
     }
-    if ($detail -match "modo de desarrollador|Developer Mode|developer mode") {
-        Write-Host "El mensaje menciona el modo de desarrollador. Este procedimiento no lo activa. Habilitarlo sería otra decisión, posterior a este intento."
-        return
-    }
-    Write-Host "No se aplicó ningún cambio adicional. Conserva este error antes de autorizar otra modificación."
 }

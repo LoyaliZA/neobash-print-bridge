@@ -75,38 +75,56 @@ try {
         Test-PocTrustSnapshot -Before $trustBefore -After $trustAfterImport -Change Unchanged -Thumbprint $publicCert.Thumbprint
     }
 
-    if ($already.Count -eq 0) {
+    $installedVersion = if ($already.Count -eq 1) { [version]$already[0].Version } else { $null }
+    $packageVersion = [version]$content.Version
+    if ($null -eq $installedVersion) {
         Add-AppxPackage -Path $msixPath
     }
+    elseif ($installedVersion -lt $packageVersion) {
+        Write-Host "Se actualiza $($script:PocPackageName) de $installedVersion a $packageVersion."
+        Write-Host "No se desinstala el paquete anterior, no se retiran impresoras y no se modifica el registro."
+        Add-AppxPackage -Path $msixPath
+    }
+    elseif ($installedVersion -eq $packageVersion) {
+        Write-Host "El paquete $packageVersion ya estaba registrado para esta cuenta. No se volvió a instalar."
+    }
     else {
-        Write-Host "El paquete ya estaba registrado para esta cuenta. No se volvió a instalar."
+        throw "La versión instalada $installedVersion es posterior a $packageVersion. No se instaló nada."
     }
 }
 catch {
+    $installFailure = $_
+    Write-Host "Fallo durante la preparación o actualización MSIX. El aprovisionamiento de la impresora se diagnostica por separado."
     if ($imported) {
         Write-Host "El certificado público quedó en $($script:PocTrustedStore)."
         Write-Host "Thumbprint para la limpieza: $($publicCert.Thumbprint)"
-        Write-Host "El paquete no quedó registrado. Para retirar solo ese certificado:"
+        Write-Host "El intento informó un error; no se presupone que Windows haya revertido el paquete. Para retirar solo ese certificado:"
         Write-Host "powershell -ExecutionPolicy Bypass -File .\scripts\poc\uninstall.ps1 -RemoveTrustedCertificate"
     }
-    Write-PocInstallFailureGuidance -Failure $_
+    Write-PocInstallFailureGuidance -Failure $installFailure
     exit 1
 }
 
 $trustAfter = Get-PocTrustSnapshot
 Test-PocTrustSnapshot -Before $trustAfterImport -After $trustAfter -Change Unchanged -Thumbprint $publicCert.Thumbprint
 
-$installed = @(Get-AppxPackage -Name $script:PocPackageName)
-if ($installed.Count -ne 1 -or $installed[0].Name -ne $script:PocPackageName) {
-    throw "El paquete registrado no es exactamente $($script:PocPackageName)."
+$validation = Get-PocInstallationValidation -PackagesBefore $packagesBefore -PrintersBefore $printersBefore -ExpectedVersion ([version]$content.Version)
+$queue = @($validation.Queue)
+if ($validation.PackageErrors.Count -eq 0) {
+    Write-Host "Validación MSIX correcta: $($validation.Package.PackageFullName), estado Ok."
 }
-Test-PocPackageDelta -Before $packagesBefore -After (Get-PocPackageFullNames) -Phase Install -PackageFullName $installed[0].PackageFullName
-
-$printersAfter = Get-PocPrinterSnapshot
-Test-PocPrinterIntegrity -Before $printersBefore -After $printersAfter -Phase Install
-$queue = @($printersAfter | Where-Object { $_.Name -eq $script:PocPrinterName })
-if ($queue.Count -ne 1) {
-    throw "El paquete quedó registrado, pero no aparece exactamente una cola $($script:PocPrinterName)."
+foreach ($message in $validation.PackageErrors) {
+    Write-Host "Fallo de actualización/validación MSIX: $message"
+}
+foreach ($message in $validation.PrinterErrors) {
+    Write-Host "Fallo de aprovisionamiento/integridad de impresoras: $message"
+}
+if ($validation.PrinterErrors.Count -gt 0) {
+    Write-Host "Diagnóstico de solo lectura, antes de cualquier limpieza:"
+    & "$PSScriptRoot\diagnose-queue.ps1"
+}
+if ($validation.PackageErrors.Count -gt 0 -or $validation.PrinterErrors.Count -gt 0) {
+    throw "Validación posterior: $($validation.PackageErrors.Count) fallo(s) MSIX; $($validation.PrinterErrors.Count) fallo(s) de impresoras. Revisa los diagnósticos anteriores."
 }
 
 $defaultAfter = Get-PocDefaultPrinterName

@@ -7,9 +7,6 @@ if (-not (Test-Path $dotnet)) {
     $dotnet = "dotnet"
 }
 
-& $dotnet test "tests\UnitTests\Neobash.PrintBridge.Tests.csproj" --nologo
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 & $dotnet msbuild "src\Windows\VirtualPrinter\Neobash.PrintBridge.VirtualPrinter.csproj" /restore /p:Configuration=Release /p:Platform=x64 /p:RuntimeIdentifier=win-x64 /m /v:m
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -48,3 +45,6 @@ Write-Host $msix.FullName
 Write-Host "Certificado público: $($publicCert.CerPath)"
 Write-Host "Thumbprint: $($publicCert.Thumbprint)"
 Write-Host "La instalación queda detenida. Revisar docs\installation.md antes de autorizar la confianza."
+
+& $dotnet test "tests\UnitTests\Neobash.PrintBridge.Tests.csproj" --nologo
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

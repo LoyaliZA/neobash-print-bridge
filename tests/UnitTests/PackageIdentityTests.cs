@@ -27,7 +27,8 @@ public sealed class PackageIdentityTests
         Assert.Equal(publisher, (string?)identity.Attribute("Publisher"));
         Assert.Equal(version, (string?)identity.Attribute("Version"));
         Assert.Matches(@"^\d+\.\d+\.\d+\.\d+$", version);
-        Assert.Equal("NPB - Prueba Virtual", (string?)printer.Attribute("DisplayName"));
+        Assert.Equal("ms-resource:PrintSupportVirtualPrinterDisplayName", (string?)printer.Attribute("DisplayName"));
+        Assert.Equal("1.0.1.0", version);
         Assert.Equal("application/oxps", (string?)printer.Attribute("PreferredInputFormat"));
         Assert.Null(printer.Attribute("OutputFileTypes"));
         Assert.Contains("runFullTrust", File.ReadAllText(manifestPath), StringComparison.Ordinal);

@@ -12,6 +12,8 @@
     <EnableMsixTooling>false</EnableMsixTooling>
     <CsWinRTComponent>true</CsWinRTComponent>
     <CsWinRTWindowsMetadata>10.0.26100.0</CsWinRTWindowsMetadata>
+    <SelfContained>false</SelfContained>
+    <PublishSelfContained>false</PublishSelfContained>
     <EnableMsixTooling>false</EnableMsixTooling>
   </PropertyGroup>
 

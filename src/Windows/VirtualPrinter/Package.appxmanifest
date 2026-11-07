@@ -4,13 +4,14 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:printsupport="http://schemas.microsoft.com/appx/manifest/printsupport/windows10"
   xmlns:printsupport2="http://schemas.microsoft.com/appx/manifest/printsupport/windows10/2"
-  IgnorableNamespaces="uap uap10 rescap printsupport2">
+  IgnorableNamespaces="uap uap10 rescap printsupport printsupport2">
 
   <Identity
     Name="Neobash.PrintBridge.VirtualPrinter"
     Publisher="CN=Neobash Print Bridge POC"
-    Version="1.0.0.0" />
+    Version="1.0.1.0" />
 
   <Properties>
     <DisplayName>Neobash Print Bridge</DisplayName>
@@ -24,6 +25,7 @@
 
   <Resources>
     <Resource Language="es-ES" />
+    <Resource Language="en-US" />
   </Resources>
 
   <Applications>
@@ -42,9 +44,10 @@
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
+        <printsupport:Extension Category="windows.printSupportExtension" EntryPoint="Neobash.PrintBridge.VirtualPrinter.Tasks.PrintSupportExtensionBackgroundTask" />
         <printsupport2:Extension Category="windows.printSupportVirtualPrinterWorkflow" EntryPoint="Neobash.PrintBridge.VirtualPrinter.Tasks.VirtualPrinterBackgroundTask">
           <printsupport2:PrintSupportVirtualPrinter
-            DisplayName="NPB - Prueba Virtual"
+            DisplayName="ms-resource:PrintSupportVirtualPrinterDisplayName"
             PrinterUri="neobash-print-bridge:npb-prueba-virtual"
             PreferredInputFormat="application/oxps"
             PdcFile="Config\NpbPruebaVirtual.pdc.xml" />
@@ -61,6 +64,7 @@
     <Extension Category="windows.activatableClass.inProcessServer">
       <InProcessServer>
         <Path>WinRT.Host.dll</Path>
+        <ActivatableClass ActivatableClassId="Neobash.PrintBridge.VirtualPrinter.Tasks.PrintSupportExtensionBackgroundTask" ThreadingModel="both" />
         <ActivatableClass ActivatableClassId="Neobash.PrintBridge.VirtualPrinter.Tasks.VirtualPrinterBackgroundTask" ThreadingModel="both" />
       </InProcessServer>
     </Extension>

@@ -13,6 +13,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>false</SelfContained>
+    <PublishSelfContained>false</PublishSelfContained>
     <Version>$(NpbPackageVersion)</Version>
     <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
     <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
