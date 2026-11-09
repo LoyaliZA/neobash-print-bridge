@@ -6,4 +6,5 @@ public sealed record InstalledQueue(
     IReadOnlyList<string> PaperNames,
     int MaximumCopies = 1,
     bool SupportsLandscape = false,
-    bool SupportsPortrait = true);
+    bool SupportsPortrait = true,
+    QueueDetail Detail = QueueDetail.Ready);
