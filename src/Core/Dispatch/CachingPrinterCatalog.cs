@@ -56,7 +56,9 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
                 return _refreshFlight;
             }
 
-            _refreshFlight = RefreshLoop(cancellationToken);
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _refreshFlight = RefreshLoop(started.Task, cancellationToken);
+            started.SetResult();
             return _refreshFlight;
         }
     }
@@ -94,9 +96,9 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
         }
     }
 
-    private async Task RefreshLoop(CancellationToken cancellationToken)
+    private async Task RefreshLoop(Task ready, CancellationToken cancellationToken)
     {
-        await Task.Yield();
+        await ready.ConfigureAwait(false);
         try
         {
             while (true)

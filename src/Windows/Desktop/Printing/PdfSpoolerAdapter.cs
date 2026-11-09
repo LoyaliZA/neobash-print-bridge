@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Drawing.Printing;
+using Neobash.PrintBridge.Core.Capture;
 using Neobash.PrintBridge.Core.Dispatch;
 
 namespace Neobash.PrintBridge.Desktop;
@@ -6,8 +8,38 @@ namespace Neobash.PrintBridge.Desktop;
 public sealed class PdfSpoolerAdapter : ISpoolerPort
 {
     private readonly PdfDocumentPreparer _prepaper = new();
+    private readonly IDiagnosticLog? _log;
+
+    public PdfSpoolerAdapter(IDiagnosticLog? log = null)
+    {
+        _log = log;
+    }
 
     public async Task SubmitAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            await SubmitCoreAsync(document, queueName, paperName, cancellationToken).ConfigureAwait(false);
+            _log?.Timing("spooler-submit", Stopwatch.GetElapsedTime(started), ("queue", queueName), ("result", "accepted"));
+        }
+        catch (SpoolerPortException exception)
+        {
+            _log?.Timing(
+                "spooler-submit",
+                Stopwatch.GetElapsedTime(started),
+                ("queue", queueName),
+                ("result", exception.Started ? "uncertain" : "failed"));
+            throw;
+        }
+        catch (Exception)
+        {
+            _log?.Timing("spooler-submit", Stopwatch.GetElapsedTime(started), ("queue", queueName), ("result", "uncertain"));
+            throw;
+        }
+    }
+
+    private async Task SubmitCoreAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
     {
         if (document.Content is not PreparedPdf prepared || prepared.Pages.Count == 0)
         {

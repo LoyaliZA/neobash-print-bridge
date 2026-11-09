@@ -9,7 +9,7 @@ public sealed class StaQueue : IDisposable
 
     public StaQueue()
     {
-        _thread = new Thread(Run)
+        _thread = new Thread(RunThread)
         {
             IsBackground = true,
             Name = "NPB catalog STA",
@@ -41,7 +41,7 @@ public sealed class StaQueue : IDisposable
     {
         ArgumentNullException.ThrowIfNull(action);
         T? result = default;
-        Run(() => result = action());
+        Run(new Action(() => result = action()));
         return result!;
     }
 
@@ -50,7 +50,7 @@ public sealed class StaQueue : IDisposable
         _work.CompleteAdding();
     }
 
-    private void Run()
+    private void RunThread()
     {
         foreach (var action in _work.GetConsumingEnumerable())
         {

@@ -1,21 +1,41 @@
+using System.Diagnostics;
 using Windows.Data.Pdf;
 using Windows.Storage.Streams;
+using Neobash.PrintBridge.Core.Capture;
 using Neobash.PrintBridge.Core.Dispatch;
 
 namespace Neobash.PrintBridge.Desktop;
 
 public sealed class PdfDocumentPreparer : IDocumentPreparer
 {
+    private readonly IDiagnosticLog? _log;
+
+    public PdfDocumentPreparer(IDiagnosticLog? log = null)
+    {
+        _log = log;
+    }
+
     public async Task<PreparedDocument> PrepareAsync(PrintJob job, CancellationToken cancellationToken)
     {
-        if (job.Options is null)
+        var started = Stopwatch.GetTimestamp();
+        try
         {
-            throw new InvalidOperationException("El trabajo no trae opciones de impresión.");
-        }
+            if (job.Options is null)
+            {
+                throw new InvalidOperationException("El trabajo no trae opciones de impresión.");
+            }
 
-        var sizes = await MeasureAsync(job.LocalPath, cancellationToken).ConfigureAwait(false);
-        var pages = PageSelection.Select(sizes.Count, job.Options.Range);
-        return new PreparedDocument(PhysicalQueueRules.PdfMediaType, new PreparedPdf(job.LocalPath, job.Options, pages), job.Id);
+            var sizes = await MeasureAsync(job.LocalPath, cancellationToken).ConfigureAwait(false);
+            var pages = PageSelection.Select(sizes.Count, job.Options.Range);
+            var prepared = new PreparedDocument(PhysicalQueueRules.PdfMediaType, new PreparedPdf(job.LocalPath, job.Options, pages), job.Id);
+            _log?.Timing("document-prepare", Stopwatch.GetElapsedTime(started), ("result", "ready"), ("pages", pages.Count.ToString()));
+            return prepared;
+        }
+        catch (Exception)
+        {
+            _log?.Timing("document-prepare", Stopwatch.GetElapsedTime(started), ("result", "failed"));
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<(double WidthInches, double HeightInches)>> MeasureAsync(string path, CancellationToken cancellationToken)

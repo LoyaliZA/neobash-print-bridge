@@ -327,14 +327,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private DispatcherQueueTimer StartWait(Action onWait)
+    private WaitNotice StartWait(Action onWait)
     {
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(2);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) => onWait();
-        timer.Start();
-        return timer;
+        var notice = new WaitNotice();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            if (notice.Completed)
+            {
+                return;
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!notice.Completed)
+                {
+                    onWait();
+                }
+            });
+        });
+        return notice;
+    }
+
+    private sealed class WaitNotice
+    {
+        public bool Completed { get; private set; }
+
+        public void Stop() => Completed = true;
     }
 
     private string AppendWarnings(string message)

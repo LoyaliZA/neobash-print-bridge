@@ -37,18 +37,27 @@ public partial class App : Application
             destinations,
             catalog,
             jobs,
-            new PdfDocumentPreparer(),
-            new PdfSpoolerAdapter());
+            new PdfDocumentPreparer(log),
+            new PdfSpoolerAdapter(log));
         log.Write("NPB Desktop abierto. Los trabajos interrumpidos en recibido o preparado quedan incierto y no se reimprimen.");
 
         var window = new MainWindow(new DesktopHost(destinations, jobs, catalog, dispatcher, log));
         _window = window;
         log.Timing("window-activation", StartupClock.SinceManaged(), ("baseline", "managed-entry"));
         window.Activate();
-        window.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        window.DispatcherQueue.TryEnqueue(() =>
         {
-            log.Timing("ui-responsive", StartupClock.SinceManaged(), ("baseline", "managed-entry"));
+            log.Timing("ui-responsive", StartupClock.SinceManaged(), ("baseline", "managed-entry"), ("priority", "normal"));
         });
+        var queuedLow = window.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            log.Timing("ui-responsive", StartupClock.SinceManaged(), ("baseline", "managed-entry"), ("priority", "low"));
+        });
+        if (!queuedLow)
+        {
+            log.Write("El callback de prioridad baja no se encoló. Eso no mide el primer fotograma.");
+        }
+
         window.BeginStartup();
     }
 }
