@@ -78,6 +78,11 @@ public sealed partial class MainWindow : Window
             UpdateCommandStates();
             _host.Log.Write("No se pudo recuperar trabajos interrumpidos. " + exception.Message);
         }
+        finally
+        {
+            // A pre-recovery snapshot must not be the final visible history.
+            RefreshHistory();
+        }
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -91,6 +96,7 @@ public sealed partial class MainWindow : Window
     private async Task LoadNamesAsync()
     {
         var token = ++_namesToken;
+        ++_detailToken;
         _namesReady = false;
         UpdateCommandStates();
         DestinationStatus.Text = "Cargando colas…";
@@ -216,6 +222,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        ++_detailToken;
         var queue = SelectedQueue();
         if (queue is null)
         {
@@ -227,6 +234,7 @@ public sealed partial class MainWindow : Window
         if (queue.Detail == QueueDetail.Ready)
         {
             FillPapers(queue);
+            DestinationStatus.Text = AppendWarnings($"Cola «{queue.QueueName}». Elige un papel anunciado por esa cola.");
             UpdateCommandStates();
             return;
         }
@@ -252,7 +260,7 @@ public sealed partial class MainWindow : Window
         var started = Stopwatch.GetTimestamp();
         var timer = StartWait(() =>
         {
-            if (token != _detailToken)
+            if (!IsCurrentDetail(token, queueName))
             {
                 return;
             }
@@ -269,7 +277,7 @@ public sealed partial class MainWindow : Window
         {
             var read = await _host.Catalog.ReadDetailsAsync(queueName);
             timer.Stop();
-            if (token != _detailToken)
+            if (!IsCurrentDetail(token, queueName))
             {
                 return;
             }
@@ -317,7 +325,7 @@ public sealed partial class MainWindow : Window
         catch (Exception exception)
         {
             timer.Stop();
-            if (token != _detailToken)
+            if (!IsCurrentDetail(token, queueName))
             {
                 return;
             }
@@ -326,6 +334,10 @@ public sealed partial class MainWindow : Window
             UpdateCommandStates();
         }
     }
+
+    private bool IsCurrentDetail(int token, string queueName) =>
+        token == _detailToken
+        && string.Equals(QueueBox.SelectedItem as string, queueName, StringComparison.OrdinalIgnoreCase);
 
     private WaitNotice StartWait(Action onWait)
     {
@@ -373,7 +385,7 @@ public sealed partial class MainWindow : Window
         var queue = SelectedQueue();
         var paperReady = queue is { Detail: QueueDetail.Ready } && PaperBox.SelectedItem is string;
         PaperBox.IsEnabled = _namesReady && !catalogFailed && queue is { Detail: QueueDetail.Ready };
-        SaveButton.IsEnabled = paperReady && !catalogFailed;
+        SaveButton.IsEnabled = _namesReady && paperReady && !catalogFailed;
         var saved = _destinationId is null ? null : _host.Destinations.Find(_destinationId);
         if (saved is null && _namesReady)
         {
@@ -383,7 +395,7 @@ public sealed partial class MainWindow : Window
         var destinationMatches = saved is not null
             && queue is not null
             && string.Equals(queue.QueueName, saved.QueueName, StringComparison.OrdinalIgnoreCase);
-        PrintButton.IsEnabled = !_printing && _snapshotReady && paperReady && destinationMatches && !catalogFailed;
+        PrintButton.IsEnabled = _namesReady && !_printing && _snapshotReady && paperReady && destinationMatches && !catalogFailed;
     }
 
     private void FillPapers(InstalledQueue? queue)
@@ -657,6 +669,11 @@ public sealed partial class MainWindow : Window
         {
             DispatcherQueue.TryEnqueue(() =>
             {
+                if (token != _historyToken)
+                {
+                    return;
+                }
+
                 PrintStatus.Text = "No se pudo leer el historial. " + exception.Message;
                 _host.Log.Write("Historial no leído. " + exception.Message);
             });
