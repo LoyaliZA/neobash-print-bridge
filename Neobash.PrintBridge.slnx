@@ -15,4 +15,7 @@
   <Folder Name="/tests/UnitTests/">
     <Project Path="tests/UnitTests/Neobash.PrintBridge.Tests.csproj" />
   </Folder>
+  <Folder Name="/tests/WindowsPrintTests/">
+    <Project Path="tests/WindowsPrintTests/Neobash.PrintBridge.WindowsPrintTests.csproj" />
+  </Folder>
 </Solution>

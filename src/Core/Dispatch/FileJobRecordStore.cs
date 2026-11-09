@@ -38,6 +38,7 @@ public sealed class FileJobRecordStore : IJobRecordStore
                 LocalPath = job.LocalPath,
                 DestinationId = job.DestinationId,
                 PaperName = job.PaperName,
+                Options = job.Options,
                 QueueName = queueName,
                 Phase = JobPhase.Received,
                 ReceivedAt = DateTimeOffset.UtcNow,

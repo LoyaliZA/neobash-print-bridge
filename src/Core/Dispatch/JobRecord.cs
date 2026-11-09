@@ -12,6 +12,8 @@ public sealed class JobRecord
 
     public string? PaperName { get; init; }
 
+    public PrintOptions? Options { get; init; }
+
     public required string QueueName { get; init; }
 
     public JobPhase Phase { get; set; }

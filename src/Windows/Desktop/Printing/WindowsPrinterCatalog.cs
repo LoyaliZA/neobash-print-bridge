@@ -55,7 +55,8 @@ public sealed class WindowsPrinterCatalog : IPrinterCatalog
             papers.Add(size.PaperName);
         }
 
-        return new InstalledQueue(queueName, ReadDriverName(queueName), papers);
+        var maximumCopies = settings.MaximumCopies < 1 ? 1 : settings.MaximumCopies;
+        return new InstalledQueue(queueName, ReadDriverName(queueName), papers, maximumCopies, settings.LandscapeAngle != 0);
     }
 
     private static string ReadDriverName(string queueName)

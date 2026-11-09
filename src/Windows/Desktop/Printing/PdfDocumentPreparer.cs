@@ -8,14 +8,46 @@ public sealed class PdfDocumentPreparer : IDocumentPreparer
 {
     public async Task<PreparedDocument> PrepareAsync(PrintJob job, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!File.Exists(job.LocalPath))
+        if (job.Options is null)
         {
-            throw new FileNotFoundException("El PDF indicado no está en esa ruta.", job.LocalPath);
+            throw new InvalidOperationException("El trabajo no trae opciones de impresión.");
         }
 
-        var bytes = await File.ReadAllBytesAsync(job.LocalPath, cancellationToken).ConfigureAwait(false);
-        using var stream = new InMemoryRandomAccessStream();
+        var sizes = await MeasureAsync(job.LocalPath, cancellationToken).ConfigureAwait(false);
+        var pages = PageSelection.Select(sizes.Count, job.Options.Range);
+        return new PreparedDocument(PhysicalQueueRules.PdfMediaType, new PreparedPdf(job.LocalPath, job.Options, pages), job.Id);
+    }
+
+    public async Task<IReadOnlyList<(double WidthInches, double HeightInches)>> MeasureAsync(string path, CancellationToken cancellationToken)
+    {
+        using var opened = await OpenAsync(path, cancellationToken).ConfigureAwait(false);
+        if (opened.Document.PageCount == 0)
+        {
+            throw new InvalidOperationException("El PDF no tiene páginas.");
+        }
+
+        var sizes = new List<(double WidthInches, double HeightInches)>(checked((int)opened.Document.PageCount));
+        for (uint index = 0; index < opened.Document.PageCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var page = opened.Document.GetPage(index);
+            var (width, height) = PageLayoutCalculator.PhysicalSizeFromDips(page.Size.Width, page.Size.Height);
+            sizes.Add((width, height));
+        }
+
+        return sizes;
+    }
+
+    private static async Task<OpenedPdf> OpenAsync(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException("El PDF indicado no está en esa ruta.", path);
+        }
+
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        var stream = new InMemoryRandomAccessStream();
         var writer = new DataWriter(stream);
         writer.WriteBytes(bytes);
         await writer.StoreAsync();
@@ -23,30 +55,14 @@ public sealed class PdfDocumentPreparer : IDocumentPreparer
         writer.DetachStream();
         writer.Dispose();
         stream.Seek(0);
-
         var document = await PdfDocument.LoadFromStreamAsync(stream);
-        if (document.PageCount == 0)
-        {
-            throw new InvalidOperationException("El PDF no tiene páginas.");
-        }
+        return new OpenedPdf(document, stream);
+    }
 
-        var pages = new List<byte[]>(checked((int)document.PageCount));
-        for (uint index = 0; index < document.PageCount; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var page = document.GetPage(index);
-            using var rendered = new InMemoryRandomAccessStream();
-            await page.RenderToStreamAsync(rendered);
-            rendered.Seek(0);
-            var size = checked((uint)rendered.Size);
-            var reader = new DataReader(rendered.GetInputStreamAt(0));
-            await reader.LoadAsync(size);
-            var image = new byte[size];
-            reader.ReadBytes(image);
-            reader.DetachStream();
-            pages.Add(image);
-        }
+    private sealed class OpenedPdf(PdfDocument document, InMemoryRandomAccessStream stream) : IDisposable
+    {
+        public PdfDocument Document { get; } = document;
 
-        return new PreparedDocument(PhysicalQueueRules.PdfMediaType, pages, job.Id);
+        public void Dispose() => stream.Dispose();
     }
 }

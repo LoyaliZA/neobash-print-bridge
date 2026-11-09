@@ -19,7 +19,7 @@ El XML del PrintTicket solo se valida contra el PDC en memoria. No se guarda com
 
 ## A1 — motor local, pendiente de papel
 
-NPB Desktop ya puede guardar un destino, elegir un papel anunciado por esa cola e imprimir un PDF existente por el controlador, sin diálogo de NPB. La prueba automática cubre el rechazo de una cola ausente con un catálogo simulado. La impresión física todavía no está comprobada. A1 no queda aprobado hasta ver el papel. El procedimiento está en [A1-prueba-fisica.md](A1-prueba-fisica.md).
+NPB Desktop guarda un destino y sus opciones predeterminadas, e imprime un PDF existente por el controlador, sin diálogo de NPB. La escala al porcentaje usa el tamaño físico del PDF. La primera salida en papel se vio pixelada; la rasterización nueva no queda dada por buena hasta compararla con el navegador al 90 %, en el mismo papel y la misma impresora. El procedimiento está en [A1-prueba-fisica.md](A1-prueba-fisica.md).
 
 `application/oxps` se rechaza antes del spooler. Ese rechazo no es el conector de las capturas.
 

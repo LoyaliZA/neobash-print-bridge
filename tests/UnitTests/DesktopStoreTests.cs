@@ -19,6 +19,52 @@ public sealed class DesktopStoreTests : IDisposable
         Assert.Equal("Star BSC10", loaded.QueueName);
         Assert.Equal("Rollo 80 x 297 mm", loaded.PaperName);
         Assert.Equal("Star de mostrador", loaded.DisplayName);
+        Assert.Null(loaded.Defaults);
+    }
+
+    [Fact]
+    public void Destination_defaults_round_trip_without_becoming_universal()
+    {
+        var store = new FileDestinationStore(_root);
+        var star = new PrintOptions
+        {
+            PaperName = "80mm x Receipt (48 Columns)",
+            Copies = 1,
+            ScaleMode = ScaleMode.Percentage,
+            ScalePercent = 90,
+            PagesPerSheet = 1,
+        };
+        store.Save(new PrintDestination("dest-star", "Star", "Star BSC10 (Copiar 1)", star.PaperName, star));
+        store.Save(new PrintDestination("dest-hoja", "Hojas", "Otra impresora", "A4", PrintOptions.ForPaper("A4")));
+
+        var reloaded = new FileDestinationStore(_root);
+        Assert.Equal(90, reloaded.Find("dest-star")!.Defaults!.ScalePercent);
+        Assert.Equal(ScaleMode.ActualSize, reloaded.Find("dest-hoja")!.Defaults!.ScaleMode);
+        Assert.Null(reloaded.Find("dest-hoja")!.Defaults!.ScalePercent);
+    }
+
+    [Fact]
+    public void Job_history_keeps_the_options_that_were_used()
+    {
+        var options = new PrintOptions
+        {
+            PaperName = "80mm x Receipt (48 Columns)",
+            Copies = 1,
+            Range = new PageRange(1, 1),
+            Orientation = PageOrientation.Portrait,
+            ScaleMode = ScaleMode.Percentage,
+            ScalePercent = 90,
+            PagesPerSheet = 1,
+        };
+        var store = new FileJobRecordStore(_root);
+        var job = new PrintJob("trabajo-opciones", "application/pdf", @"C:\documentos\muestra.pdf", "dest-star", options.PaperName, options);
+        Assert.True(store.TryBegin(job, "Star BSC10 (Copiar 1)"));
+
+        var record = new FileJobRecordStore(_root).Find("trabajo-opciones");
+        Assert.NotNull(record);
+        Assert.Equal(90, record.Options!.ScalePercent);
+        Assert.Equal(1, record.Options.PagesPerSheet);
+        Assert.Equal(1, record.Options.Range!.FirstPage);
     }
 
     [Fact]

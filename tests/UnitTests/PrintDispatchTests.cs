@@ -34,6 +34,53 @@ public sealed class PrintDispatchTests
     }
 
     [Fact]
+    public async Task Clipping_confirmation_is_requested_only_before_printing_starts()
+    {
+        var destination = Destination("dest-star", "Star BSC10", "A4");
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("Star BSC10", "Star BSC10", "A4"));
+        _port.Exception = new SpoolerPortException(false, "Excede el ancho.", true);
+
+        var result = await _dispatcher.DispatchAsync(Job("sin-recorte", "application/pdf", destination));
+
+        Assert.True(result.RequiresClippingConfirmation);
+        Assert.Equal(JobPhase.Failed, result.Phase);
+        Assert.False(new SpoolerPortException(true, "Envío incierto", true).RequiresClippingConfirmation);
+    }
+
+    [Fact]
+    public async Task Saved_defaults_cannot_authorize_clipping_for_new_jobs()
+    {
+        var destination = Destination("dest-star", "Star BSC10", "A4") with
+        {
+            Defaults = PrintOptions.ForPaper("A4") with { AllowClippingConfirmed = true },
+        };
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("Star BSC10", "Star BSC10", "A4"));
+
+        await _dispatcher.DispatchAsync(Job("sin-consentimiento", "application/pdf", destination));
+
+        Assert.False(_jobs.Find("sin-consentimiento")!.Options!.AllowClippingConfirmed);
+    }
+
+    [Fact]
+    public async Task Explicit_job_consent_is_persisted_without_changing_defaults()
+    {
+        var destination = Destination("dest-star", "Star BSC10", "A4");
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("Star BSC10", "Star BSC10", "A4"));
+        var job = Job("con-consentimiento", "application/pdf", destination) with
+        {
+            Options = PrintOptions.ForPaper("A4") with { AllowClippingConfirmed = true },
+        };
+
+        await _dispatcher.DispatchAsync(job);
+
+        Assert.True(_jobs.Find(job.Id)!.Options!.AllowClippingConfirmed);
+        Assert.Null(_destinations.Find(destination.Id)!.Defaults);
+    }
+
+    [Fact]
     public async Task Does_not_follow_a_different_queue_when_the_saved_one_is_missing()
     {
         var destination = Destination("dest-star", "Star BSC10", "Rollo 80 x 297 mm");
@@ -236,6 +283,7 @@ public sealed class PrintDispatchTests
                 LocalPath = job.LocalPath,
                 DestinationId = job.DestinationId,
                 PaperName = job.PaperName,
+                Options = job.Options,
                 QueueName = queueName,
                 Phase = JobPhase.Received,
                 ReceivedAt = DateTimeOffset.UtcNow,

@@ -2,7 +2,7 @@
     x:Class="Neobash.PrintBridge.Desktop.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Neobash Print Bridge">
+    Title="Neobash Print Bridge — A1.3">
     <ScrollViewer>
         <StackPanel Padding="24" Spacing="16" MaxWidth="880">
             <TextBlock
@@ -22,8 +22,34 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
+                <TextBlock Text="Impresión manual" FontWeight="SemiBold" />
+                <TextBlock
+                    TextWrapping="Wrap"
+                    Text="Una página por hoja. El porcentaje, cuando se elige, se aplica al tamaño físico del PDF. No se combina con un ajuste automático." />
+                <TextBlock TextWrapping="Wrap" Text="Si el tamaño real o el porcentaje excede el área imprimible, verás las medidas y podrás cancelar o confirmar un posible recorte para ese envío." />
                 <Button x:Name="PickButton" Content="Elegir PDF" Click="OnPickPdf" />
                 <TextBlock x:Name="PdfPath" TextWrapping="Wrap" Text="Ningún PDF elegido." />
+                <TextBlock Text="Copias" />
+                <TextBox x:Name="CopiesBox" Text="1" />
+                <TextBlock Text="Páginas" />
+                <CheckBox x:Name="AllPagesBox" Content="Todas las páginas" IsChecked="True" Checked="OnRangeModeChanged" Unchecked="OnRangeModeChanged" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBox x:Name="FirstPageBox" Width="120" PlaceholderText="Desde" IsEnabled="False" />
+                    <TextBox x:Name="LastPageBox" Width="120" PlaceholderText="Hasta" IsEnabled="False" />
+                </StackPanel>
+                <TextBlock Text="Orientación" />
+                <ComboBox x:Name="OrientationBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+                    <ComboBoxItem Content="Vertical" />
+                    <ComboBoxItem Content="Horizontal" />
+                </ComboBox>
+                <TextBlock Text="Escala" />
+                <ComboBox x:Name="ScaleBox" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="OnScaleChanged">
+                    <ComboBoxItem Content="Tamaño real" />
+                    <ComboBoxItem Content="Ajustar al área imprimible" />
+                    <ComboBoxItem Content="Porcentaje" />
+                </ComboBox>
+                <TextBlock Text="Porcentaje del tamaño físico del PDF" />
+                <TextBox x:Name="PercentBox" PlaceholderText="Por ejemplo, 90" IsEnabled="False" />
                 <Button x:Name="PrintButton" Content="Imprimir" Click="OnPrint" />
                 <TextBlock x:Name="PrintStatus" TextWrapping="Wrap" />
             </StackPanel>

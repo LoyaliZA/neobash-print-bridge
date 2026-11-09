@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window
                     QueueBox.SelectedItem = match.QueueName;
                     FillPapers(SelectedQueue());
                     SelectPaper(saved.PaperName);
+                    ApplyOptions(saved.Defaults ?? PrintOptions.ForPaper(saved.PaperName ?? ""));
                     DestinationStatus.Text = Describe(saved);
                 }
             }
@@ -156,18 +157,29 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (!queue.PaperNames.Any(item => string.Equals(item, paper, StringComparison.OrdinalIgnoreCase)))
+        if (!TryReadOptions(paper, out var options, out var readError))
         {
-            DestinationStatus.Text = "Ese papel no está entre los que anuncia la cola elegida.";
+            DestinationStatus.Text = readError;
+            return;
+        }
+
+        var optionError = PrintOptionRules.Check(options, queue);
+        if (optionError is not null)
+        {
+            DestinationStatus.Text = optionError;
             return;
         }
 
         _destinationId ??= "dest-" + Guid.NewGuid().ToString("N");
-        var destination = new PrintDestination(_destinationId, queue.QueueName, queue.QueueName, paper);
+        var destination = new PrintDestination(_destinationId, queue.QueueName, queue.QueueName, paper, options);
         _host.Destinations.Save(destination);
-        _host.Log.Write($"Destino guardado {_destinationId} cola «{queue.QueueName}» papel «{paper}».");
+        _host.Log.Write($"Destino guardado {_destinationId} {options.Describe()}.");
         DestinationStatus.Text = Describe(destination);
     }
+
+    private void OnRangeModeChanged(object sender, RoutedEventArgs e) => UpdateRangeBoxes();
+
+    private void OnScaleChanged(object sender, SelectionChangedEventArgs e) => UpdatePercentBox();
 
     private async void OnPickPdf(object sender, RoutedEventArgs e)
     {
@@ -200,11 +212,15 @@ public sealed partial class MainWindow : Window
 
         var queue = SelectedQueue();
         var paper = PaperBox.SelectedItem as string;
-        if (queue is null
-            || !string.Equals(queue.QueueName, destination.QueueName, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(paper, destination.PaperName, StringComparison.OrdinalIgnoreCase))
+        if (queue is null || !string.Equals(queue.QueueName, destination.QueueName, StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus.Text = "La selección en pantalla no coincide con el destino guardado. Guárdala otra vez o vuelve a la cola y al papel guardados.";
+            PrintStatus.Text = "La cola en pantalla no coincide con el destino guardado. No se elige otra.";
+            return;
+        }
+
+        if (!TryReadOptions(paper, out var options, out var readError))
+        {
+            PrintStatus.Text = readError;
             return;
         }
 
@@ -219,12 +235,42 @@ public sealed partial class MainWindow : Window
             PhysicalQueueRules.PdfMediaType,
             _pdfPath,
             destination.Id,
-            destination.PaperName);
+            options.PaperName,
+            options);
         _printing = true;
         PrintButton.IsEnabled = false;
         try
         {
             var result = await _host.Dispatcher.DispatchAsync(job);
+            if (result.RequiresClippingConfirmation)
+            {
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = Content.XamlRoot,
+                    Title = "La página puede quedar recortada",
+                    Content = new TextBlock { Text = result.Detail, TextWrapping = TextWrapping.Wrap },
+                    PrimaryButtonText = "Imprimir con posible recorte",
+                    CloseButtonText = "Cancelar",
+                    DefaultButton = ContentDialogButton.Close,
+                };
+                var choice = await dialog.ShowAsync();
+                if (choice != ContentDialogResult.Primary)
+                {
+                    PrintStatus.Text = "No se envió el trabajo a la impresora. Puedes elegir Ajustar al área imprimible o cambiar la escala.";
+                    return;
+                }
+
+                // The rejected attempt never started printing. Explicit consent creates
+                // a new, auditable job; it does not bypass identifier deduplication.
+                var rejectedId = job.Id;
+                job = job with
+                {
+                    Id = "job-" + Guid.NewGuid().ToString("N"),
+                    Options = options with { AllowClippingConfirmed = true },
+                };
+                _host.Log.Write($"Posible recorte confirmado para {job.Id}; intento previo sin envío {rejectedId}.");
+                result = await _host.Dispatcher.DispatchAsync(job);
+            }
             var phase = JobPhaseText.Describe(result.Phase);
             PrintStatus.Text = $"Trabajo {job.Id}: {phase}. {result.Detail}";
             _host.Log.Write($"{phase} {job.Id} {result.Detail}");
@@ -293,7 +339,8 @@ public sealed partial class MainWindow : Window
                 var confirmation = string.IsNullOrWhiteSpace(record.PhysicalConfirmation)
                     ? "confirmación física pendiente"
                     : "confirmación física: " + record.PhysicalConfirmation;
-                var label = $"{record.ReceivedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} · {record.Id} · {JobPhaseText.Describe(record.Phase)} · {record.QueueName} · {record.PaperName} · {record.Detail} · {confirmation}";
+                var optionsText = record.Options?.Describe() ?? record.PaperName;
+                var label = $"{record.ReceivedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} · {record.Id} · {JobPhaseText.Describe(record.Phase)} · {record.QueueName} · {optionsText} · {record.Detail} · {confirmation}";
                 _history.Add(record);
                 HistoryList.Items.Add(label);
             }
@@ -340,6 +387,113 @@ public sealed partial class MainWindow : Window
         return _queues.FirstOrDefault(queue => string.Equals(queue.QueueName, name, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string Describe(PrintDestination destination) =>
-        $"Destino {destination.Id} guardado para la cola «{destination.QueueName}» y el papel «{destination.PaperName}».";
+    private void ApplyOptions(PrintOptions options)
+    {
+        CopiesBox.Text = options.Copies.ToString();
+        AllPagesBox.IsChecked = options.Range is null;
+        FirstPageBox.Text = options.Range?.FirstPage.ToString() ?? "";
+        LastPageBox.Text = options.Range?.LastPage.ToString() ?? "";
+        OrientationBox.SelectedIndex = options.Orientation == PageOrientation.Landscape ? 1 : 0;
+        ScaleBox.SelectedIndex = options.ScaleMode switch
+        {
+            ScaleMode.FitPrintableArea => 1,
+            ScaleMode.Percentage => 2,
+            _ => 0,
+        };
+        if (options.ScalePercent is int percent)
+        {
+            PercentBox.Text = percent.ToString();
+        }
+
+        UpdateRangeBoxes();
+        UpdatePercentBox();
+    }
+
+    private bool TryReadOptions(string? paper, out PrintOptions options, out string error)
+    {
+        options = PrintOptions.ForPaper(paper ?? "");
+        error = "";
+        if (string.IsNullOrWhiteSpace(paper))
+        {
+            error = "Elige un papel anunciado por esa cola.";
+            return false;
+        }
+
+        if (!int.TryParse(CopiesBox.Text, out var copies))
+        {
+            error = "Las copias tienen que ser un número entero.";
+            return false;
+        }
+
+        PageRange? range = null;
+        if (AllPagesBox.IsChecked != true)
+        {
+            if (!int.TryParse(FirstPageBox.Text, out var first) || !int.TryParse(LastPageBox.Text, out var last))
+            {
+                error = "El rango de páginas tiene que usar números enteros.";
+                return false;
+            }
+
+            range = new PageRange(first, last);
+        }
+
+        var orientation = OrientationBox.SelectedIndex == 1 ? PageOrientation.Landscape : PageOrientation.Portrait;
+        var scaleMode = ScaleBox.SelectedIndex switch
+        {
+            1 => ScaleMode.FitPrintableArea,
+            2 => ScaleMode.Percentage,
+            _ => ScaleMode.ActualSize,
+        };
+        int? percent = null;
+        if (scaleMode == ScaleMode.Percentage)
+        {
+            if (!int.TryParse(PercentBox.Text, out var parsed))
+            {
+                error = "El porcentaje tiene que ser un número entero del tamaño físico del PDF.";
+                return false;
+            }
+
+            percent = parsed;
+        }
+
+        options = new PrintOptions
+        {
+            PaperName = paper,
+            Copies = copies,
+            Range = range,
+            Orientation = orientation,
+            ScaleMode = scaleMode,
+            ScalePercent = percent,
+            PagesPerSheet = 1,
+        };
+        return true;
+    }
+
+    private void UpdateRangeBoxes()
+    {
+        if (AllPagesBox is null || FirstPageBox is null || LastPageBox is null)
+        {
+            return;
+        }
+
+        var ranged = AllPagesBox.IsChecked != true;
+        FirstPageBox.IsEnabled = ranged;
+        LastPageBox.IsEnabled = ranged;
+    }
+
+    private void UpdatePercentBox()
+    {
+        if (PercentBox is null || ScaleBox is null)
+        {
+            return;
+        }
+
+        PercentBox.IsEnabled = ScaleBox.SelectedIndex == 2;
+    }
+
+    private static string Describe(PrintDestination destination)
+    {
+        var options = destination.Defaults?.Describe() ?? destination.PaperName;
+        return $"Destino {destination.Id} guardado para la cola «{destination.QueueName}». Valores predeterminados: {options}.";
+    }
 }

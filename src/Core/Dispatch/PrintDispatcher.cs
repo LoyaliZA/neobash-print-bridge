@@ -48,53 +48,57 @@ public sealed class PrintDispatcher
             return new DispatchResult(JobPhase.Failed, "Esa cola es virtual y no puede ser destino físico.");
         }
 
-        if (!AnnouncesPaper(queue, destination.PaperName) || !SamePaper(job.PaperName, destination.PaperName))
+        var options = job.Options ?? destination.Defaults ?? PrintOptions.ForPaper(destination.PaperName ?? "");
+        // Saved defaults cannot authorize clipping for a new job.
+        options = options with { AllowClippingConfirmed = job.Options?.AllowClippingConfirmed == true };
+        var optionError = PrintOptionRules.Check(options, queue);
+        if (optionError is not null)
         {
-            return new DispatchResult(JobPhase.Failed, "El papel elegido no está entre los que anuncia esa cola.");
+            return new DispatchResult(JobPhase.Failed, optionError);
         }
 
-        if (!_jobs.TryBegin(job, queue.QueueName))
+        if (!string.IsNullOrWhiteSpace(job.PaperName)
+            && !string.Equals(job.PaperName, options.PaperName, StringComparison.OrdinalIgnoreCase))
         {
-            var existing = _jobs.Find(job.Id);
+            return new DispatchResult(JobPhase.Failed, "El papel del trabajo no coincide con las opciones.");
+        }
+
+        var effective = job with { PaperName = options.PaperName, Options = options };
+        if (!_jobs.TryBegin(effective, queue.QueueName))
+        {
+            var existing = _jobs.Find(effective.Id);
             return new DispatchResult(existing?.Phase ?? JobPhase.Failed, DuplicateDetail);
         }
 
         PreparedDocument document;
         try
         {
-            document = await _preparer.PrepareAsync(job, cancellationToken).ConfigureAwait(false);
-            _jobs.Update(job.Id, JobPhase.Prepared, "El documento quedó preparado.");
+            document = await _preparer.PrepareAsync(effective, cancellationToken).ConfigureAwait(false);
+            _jobs.Update(effective.Id, JobPhase.Prepared, "El documento quedó preparado.");
         }
         catch (Exception exception)
         {
-            _jobs.Update(job.Id, JobPhase.Failed, exception.Message);
+            _jobs.Update(effective.Id, JobPhase.Failed, exception.Message);
             return new DispatchResult(JobPhase.Failed, exception.Message);
         }
 
         try
         {
-            _spooler.Submit(document, queue.QueueName, destination.PaperName, cancellationToken);
+            _spooler.Submit(document, queue.QueueName, effective.PaperName, cancellationToken);
         }
         catch (SpoolerPortException exception) when (!exception.Started)
         {
-            _jobs.Update(job.Id, JobPhase.Failed, exception.Message);
-            return new DispatchResult(JobPhase.Failed, exception.Message);
+            _jobs.Update(effective.Id, JobPhase.Failed, exception.Message);
+            return new DispatchResult(JobPhase.Failed, exception.Message, exception.RequiresClippingConfirmation);
         }
         catch (Exception exception)
         {
-            _jobs.Update(job.Id, JobPhase.Uncertain, exception.Message);
+            _jobs.Update(effective.Id, JobPhase.Uncertain, exception.Message);
             return new DispatchResult(JobPhase.Uncertain, exception.Message);
         }
 
         const string accepted = "El spooler aceptó el trabajo. Eso no confirma el papel.";
-        _jobs.Update(job.Id, JobPhase.SubmittedToSpooler, accepted);
+        _jobs.Update(effective.Id, JobPhase.SubmittedToSpooler, accepted);
         return new DispatchResult(JobPhase.SubmittedToSpooler, accepted);
     }
-
-    private static bool AnnouncesPaper(InstalledQueue queue, string? paperName) =>
-        !string.IsNullOrWhiteSpace(paperName)
-        && queue.PaperNames.Any(paper => string.Equals(paper, paperName, StringComparison.OrdinalIgnoreCase));
-
-    private static bool SamePaper(string? left, string? right) =>
-        string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 }
