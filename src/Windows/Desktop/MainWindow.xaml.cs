@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     private bool _printing;
     private bool _refreshingHistory;
     private bool _snapshotReady;
+    private int _historyToken;
     private bool _namesReady;
     private bool _activatedLogged;
     private int _namesToken;
@@ -597,12 +598,34 @@ public sealed partial class MainWindow : Window
     private async Task LoadHistoryAsync(string? selected)
     {
         var started = Stopwatch.GetTimestamp();
+        var token = ++_historyToken;
         try
         {
-            var records = await Task.Run(() => _host.Jobs.List().OrderByDescending(record => record.ReceivedAt).ToList());
+            var records = await Task.Run(() =>
+            {
+                if (_host.Jobs is FileJobRecordStore store)
+                {
+                    store.RebuildFromDisk();
+                }
+
+                return _host.Jobs.List().OrderByDescending(record => record.ReceivedAt).ToList();
+            });
             DispatcherQueue.TryEnqueue(() =>
             {
-                ApplyHistory(records, selected);
+                if (token != _historyToken)
+                {
+                    return;
+                }
+
+                ApplyHistory(records, selected, token);
+                if (_host.Jobs is FileJobRecordStore reloaded)
+                {
+                    foreach (var warning in reloaded.ReadWarnings)
+                    {
+                        _host.Log.Write(warning);
+                    }
+                }
+
                 _host.Log.Timing(
                     "history-load",
                     Stopwatch.GetElapsedTime(started),
@@ -621,31 +644,45 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ApplyHistory(IReadOnlyList<JobRecord> records, string? selected)
+    private void ApplyHistory(IReadOnlyList<JobRecord> records, string? selected, int token)
     {
         _refreshingHistory = true;
-        try
+        _history.Clear();
+        HistoryList.Items.Clear();
+        _history.AddRange(records);
+        var rendered = 0;
+
+        void RenderBatch()
         {
-            _history.Clear();
-            HistoryList.Items.Clear();
-            foreach (var record in records)
+            if (token != _historyToken)
             {
-                _history.Add(record);
-                HistoryList.Items.Add(HistoryLabel(record));
+                return;
             }
 
-            var index = _history.FindIndex(record => string.Equals(record.Id, selected, StringComparison.Ordinal));
-            if (index >= 0)
+            var take = Math.Min(40, records.Count - rendered);
+            for (var index = 0; index < take; index++)
             {
-                HistoryList.SelectedIndex = index;
+                HistoryList.Items.Add(HistoryLabel(records[rendered + index]));
             }
-        }
-        finally
-        {
+
+            rendered += take;
+            if (rendered < records.Count)
+            {
+                DispatcherQueue.TryEnqueue(RenderBatch);
+                return;
+            }
+
+            var selectedIndex = _history.FindIndex(record => string.Equals(record.Id, selected, StringComparison.Ordinal));
+            if (selectedIndex >= 0)
+            {
+                HistoryList.SelectedIndex = selectedIndex;
+            }
+
             _refreshingHistory = false;
+            UpdateConfirmButton();
         }
 
-        UpdateConfirmButton();
+        RenderBatch();
     }
 
     private static string HistoryLabel(JobRecord record)

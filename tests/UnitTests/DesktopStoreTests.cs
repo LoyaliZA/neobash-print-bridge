@@ -102,6 +102,48 @@ public sealed class DesktopStoreTests : IDisposable
     }
 
     [Fact]
+    public void Unreadable_history_file_does_not_hide_the_rest_or_a_temporary_file()
+    {
+        var store = new FileJobRecordStore(_root);
+        store.TryBegin(new PrintJob("trabajo-sano", "application/pdf", @"C:\documentos\muestra.pdf", "dest-estable", "A4"), "Star BSC10");
+        var jobs = Path.Combine(_root, "jobs");
+        File.WriteAllText(Path.Combine(jobs, "roto.json"), "{");
+        File.WriteAllText(Path.Combine(jobs, "trabajo-sano.json.tmp"), """{"Id":"trabajo-sano","Phase":"Failed"}""");
+
+        var listed = store.List();
+
+        var record = Assert.Single(listed);
+        Assert.Equal("trabajo-sano", record.Id);
+        Assert.Equal(JobPhase.Received, record.Phase);
+        Assert.Contains("roto", Assert.Single(store.ReadWarnings), StringComparison.Ordinal);
+        var again = store.List();
+        Assert.Equal("trabajo-sano", Assert.Single(again).Id);
+        Assert.DoesNotContain(store.ReadWarnings, warning => warning.Contains("trabajo-sano", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void History_cache_rebuilds_from_json_written_by_another_store()
+    {
+        var first = new FileJobRecordStore(_root);
+        var job = new PrintJob("trabajo-compartido", "application/pdf", @"C:\documentos\muestra.pdf", "dest-estable", "A4");
+        Assert.True(first.TryBegin(job, "Star BSC10"));
+        var cached = first.List();
+        cached[0].Phase = JobPhase.Failed;
+        Assert.Equal(JobPhase.Received, first.Find("trabajo-compartido")!.Phase);
+
+        var second = new FileJobRecordStore(_root);
+        second.Update("trabajo-compartido", JobPhase.SubmittedToSpooler, "Escrito por otra instancia.");
+        Assert.Equal(JobPhase.Received, first.Find("trabajo-compartido")!.Phase);
+
+        first.RebuildFromDisk();
+        Assert.Equal(JobPhase.SubmittedToSpooler, first.Find("trabajo-compartido")!.Phase);
+        Assert.Equal("Escrito por otra instancia.", first.List().Single(record => record.Id == "trabajo-compartido").Detail);
+
+        var third = new FileJobRecordStore(_root);
+        Assert.Equal(JobPhase.SubmittedToSpooler, third.Find("trabajo-compartido")!.Phase);
+    }
+
+    [Fact]
     public void Recovery_snapshot_leaves_a_later_job_received()
     {
         var store = new FileJobRecordStore(_root);
