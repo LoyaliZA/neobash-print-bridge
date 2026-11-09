@@ -57,9 +57,9 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
             }
 
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _refreshFlight = RefreshLoop(started.Task, cancellationToken);
-            started.SetResult();
-            return _refreshFlight;
+            _refreshFlight = started.Task;
+            _ = Task.Run(() => RefreshLoop(started, cancellationToken));
+            return started.Task;
         }
     }
 
@@ -79,9 +79,10 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
                 return flight.Task;
             }
 
-            var task = ReadDetailsCore(queueName, generation, cancellationToken);
-            _flights[queueName] = new DetailFlight(generation, task);
-            return task;
+            var current = new DetailFlight(generation, new(TaskCreationOptions.RunContinuationsAsynchronously));
+            _flights[queueName] = current;
+            _ = CompleteDetailsAsync(queueName, current, cancellationToken);
+            return current.Task;
         }
     }
 
@@ -96,9 +97,8 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
         }
     }
 
-    private async Task RefreshLoop(Task ready, CancellationToken cancellationToken)
+    private async Task RefreshLoop(TaskCompletionSource completion, CancellationToken cancellationToken)
     {
-        await ready.ConfigureAwait(false);
         try
         {
             while (true)
@@ -127,7 +127,6 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
 
                 var elapsed = Stopwatch.GetElapsedTime(started);
 
-                var again = false;
                 var publishTiming = false;
                 lock (_gate)
                 {
@@ -145,8 +144,6 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
 
                         publishTiming = true;
                     }
-
-                    again = _rerunRefresh;
                 }
 
                 if (publishTiming)
@@ -159,18 +156,75 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
                         ("count", (names?.Count ?? 0).ToString()));
                 }
 
-                if (!again)
+                lock (_gate)
                 {
-                    return;
+                    // Invalidation and retirement must be one atomic decision.
+                    if (!_rerunRefresh)
+                    {
+                        _refreshFlight = null;
+                        completion.TrySetResult();
+                        return;
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            RetireRefresh(completion);
+            completion.TrySetCanceled(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            RetireRefresh(completion);
+            completion.TrySetException(exception);
+        }
+    }
+
+    private void RetireRefresh(TaskCompletionSource completion)
+    {
+        lock (_gate)
+        {
+            if (ReferenceEquals(_refreshFlight, completion.Task))
+            {
+                _refreshFlight = null;
+            }
+        }
+    }
+
+    private async Task CompleteDetailsAsync(string queueName, DetailFlight flight, CancellationToken cancellationToken)
+    {
+        InstalledQueue? result = null;
+        Exception? error = null;
+        try
+        {
+            result = await ReadDetailsCore(queueName, flight.Generation, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            error = exception;
         }
         finally
         {
             lock (_gate)
             {
-                _refreshFlight = null;
+                if (_flights.TryGetValue(queueName, out var current) && ReferenceEquals(current, flight))
+                {
+                    _flights.Remove(queueName);
+                }
             }
+        }
+
+        if (error is OperationCanceledException)
+        {
+            flight.Completion.TrySetCanceled(cancellationToken);
+        }
+        else if (error is not null)
+        {
+            flight.Completion.TrySetException(error);
+        }
+        else
+        {
+            flight.Completion.TrySetResult(result);
         }
     }
 
@@ -193,11 +247,6 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
         string? outcome = null;
         lock (_gate)
         {
-            if (_flights.TryGetValue(queueName, out var flight) && flight.Generation == generation)
-            {
-                _flights.Remove(queueName);
-            }
-
             if (generation != _generation)
             {
                 return null;
@@ -337,5 +386,8 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
     private InstalledQueue? FindLocked(string queueName) =>
         _queues.FirstOrDefault(queue => string.Equals(queue.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
 
-    private sealed record DetailFlight(int Generation, Task<InstalledQueue?> Task);
+    private sealed record DetailFlight(int Generation, TaskCompletionSource<InstalledQueue?> Completion)
+    {
+        public Task<InstalledQueue?> Task => Completion.Task;
+    }
 }

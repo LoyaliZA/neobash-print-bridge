@@ -1,9 +1,97 @@
 using Neobash.PrintBridge.Core.Dispatch;
+using Neobash.PrintBridge.Core.Capture;
 
 namespace Neobash.PrintBridge.Tests;
 
 public sealed class PrinterCatalogTests
 {
+    [Fact]
+    public async Task Invalidation_during_refresh_completion_is_not_lost()
+    {
+        var probe = new FakeProbe { Names = ["Vieja"] };
+        CachingPrinterCatalog catalog = null!;
+        var calls = 0;
+        var log = new CallbackLog(() =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                probe.Names = ["Nueva"];
+                catalog.Invalidate();
+            }
+        });
+        catalog = new CachingPrinterCatalog(probe, log);
+
+        await catalog.RefreshNamesAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, probe.ListNamesCalls);
+        Assert.Equal("Nueva", Assert.Single(catalog.List()).QueueName);
+        await catalog.RefreshNamesAsync();
+        Assert.Equal(3, probe.ListNamesCalls);
+    }
+
+    [Fact]
+    public async Task Cancelled_detail_flight_is_removed_and_can_be_read_again()
+    {
+        var probe = new FakeProbe();
+        probe.Details["A"] = Queue("A", "Driver", "A4");
+        var catalog = new CachingPrinterCatalog(probe);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => catalog.ReadDetailsAsync("A", cancelled.Token));
+        var result = await catalog.ReadDetailsAsync("A").WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("A4", Assert.Single(result!.PaperNames));
+        Assert.Equal(1, probe.ReadDetailsCalls);
+    }
+
+    [Fact]
+    public async Task Concurrent_details_for_the_same_queue_share_one_probe()
+    {
+        var probe = new FakeProbe { BlockFirstDetail = true, FirstDetail = Queue("A", "Driver", "A4") };
+        var catalog = new CachingPrinterCatalog(probe);
+        var first = catalog.ReadDetailsAsync("A");
+        try
+        {
+            await probe.DetailsEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var second = catalog.ReadDetailsAsync("a");
+            Assert.Same(first, second);
+            probe.ReleaseDetails.TrySetResult();
+            Assert.Same(await first, await second);
+            Assert.Equal(1, probe.ReadDetailsCalls);
+        }
+        finally { probe.ReleaseDetails.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task Old_details_finishing_after_refresh_cannot_replace_new_capabilities()
+    {
+        var probe = new FakeProbe
+        {
+            Names = ["A"], BlockFirstDetail = true, FirstDetail = Queue("A", "Driver", "Viejo"),
+        };
+        probe.Details["A"] = Queue("A", "Driver", "Nuevo");
+        var catalog = new CachingPrinterCatalog(probe);
+        var old = catalog.ReadDetailsAsync("A");
+        try
+        {
+            await probe.DetailsEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await catalog.RefreshNamesAsync();
+            var current = await catalog.ReadDetailsAsync("A");
+            probe.ReleaseDetails.TrySetResult();
+            Assert.Null(await old);
+            Assert.Equal("Nuevo", Assert.Single(current!.PaperNames));
+            Assert.Same(current, catalog.Find("A"));
+        }
+        finally { probe.ReleaseDetails.TrySetResult(); }
+    }
+
+    private sealed class CallbackLog(Action callback) : IDiagnosticLog
+    {
+        public void Write(string message) { }
+        public void Timing(string operation, TimeSpan elapsed, params (string Key, string Value)[] fields) => callback();
+    }
+
     [Fact]
     public async Task Empty_catalog_publishes_no_queues_and_list_does_not_probe()
     {
