@@ -7,6 +7,41 @@ public sealed class DesktopStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "npb-desktop-tests", Guid.NewGuid().ToString("N"));
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Recovery_does_not_downgrade_a_terminal_record_written_after_the_history_was_cached(bool explicitIds)
+    {
+        var first = new FileJobRecordStore(_root);
+        var job = new PrintJob("terminal", "application/pdf", "test.pdf", "dest", "A4");
+        first.TryBegin(job, "Printer");
+        first.List();
+        var second = new FileJobRecordStore(_root);
+        second.Update(job.Id, JobPhase.SubmittedToSpooler, "accepted");
+        second.RecordPhysicalConfirmation(job.Id, "paper seen");
+
+        JobRecovery.MarkInterruptedAsUncertain(first, explicitIds ? first.ListIds() : null);
+
+        var actual = new FileJobRecordStore(_root).Find(job.Id)!;
+        Assert.Equal(JobPhase.SubmittedToSpooler, actual.Phase);
+        Assert.Equal("paper seen", actual.PhysicalConfirmation);
+    }
+
+    [Fact]
+    public void Update_preserves_confirmation_written_by_another_store_after_the_history_was_cached()
+    {
+        var first = new FileJobRecordStore(_root);
+        var job = new PrintJob("confirmed", "application/pdf", "test.pdf", "dest", "A4");
+        first.TryBegin(job, "Printer");
+        first.Update(job.Id, JobPhase.SubmittedToSpooler, "accepted");
+        first.List();
+        new FileJobRecordStore(_root).RecordPhysicalConfirmation(job.Id, "paper seen");
+
+        first.Update(job.Id, JobPhase.SubmittedToSpooler, "updated detail");
+
+        Assert.Equal("paper seen", new FileJobRecordStore(_root).Find(job.Id)!.PhysicalConfirmation);
+    }
+
     [Fact]
     public void Destination_keeps_its_identifier_when_reloaded()
     {
@@ -133,7 +168,8 @@ public sealed class DesktopStoreTests : IDisposable
 
         var second = new FileJobRecordStore(_root);
         second.Update("trabajo-compartido", JobPhase.SubmittedToSpooler, "Escrito por otra instancia.");
-        Assert.Equal(JobPhase.Received, first.Find("trabajo-compartido")!.Phase);
+        Assert.Equal(JobPhase.Received, Assert.Single(first.List()).Phase);
+        Assert.Equal(JobPhase.SubmittedToSpooler, first.Find("trabajo-compartido")!.Phase);
 
         first.RebuildFromDisk();
         Assert.Equal(JobPhase.SubmittedToSpooler, first.Find("trabajo-compartido")!.Phase);

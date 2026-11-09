@@ -6,9 +6,8 @@ public static class JobRecovery
 
     public static void MarkInterruptedAsUncertain(IJobRecordStore jobs, IReadOnlyList<string>? onlyIds = null)
     {
-        var records = onlyIds is null
-            ? jobs.List()
-            : onlyIds.Select(jobs.Find).OfType<JobRecord>().ToArray();
+        var ids = onlyIds ?? jobs.List().Select(record => record.Id).ToArray();
+        var records = ids.Select(jobs.Find).OfType<JobRecord>();
         foreach (var record in records)
         {
             if (record.Phase is JobPhase.Received or JobPhase.Prepared)

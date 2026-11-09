@@ -106,11 +106,8 @@ public sealed class FileJobRecordStore : IJobRecordStore
     {
         lock (_gate)
         {
-            if (_cacheLoaded)
-            {
-                return _cache.TryGetValue(id, out var cached) ? Clone(cached) : null;
-            }
-
+            // The list cache is only a display snapshot. Another Desktop instance
+            // may have committed a final phase or a physical confirmation since.
             var path = PathFor(id);
             return File.Exists(path) ? TryRead(path) : null;
         }
@@ -159,11 +156,6 @@ public sealed class FileJobRecordStore : IJobRecordStore
     private JobRecord Require(string id)
     {
         JobIdRules.EnsureSafe(id);
-        if (_cacheLoaded && _cache.TryGetValue(id, out var cached))
-        {
-            return Clone(cached);
-        }
-
         var path = PathFor(id);
         if (!File.Exists(path))
         {
