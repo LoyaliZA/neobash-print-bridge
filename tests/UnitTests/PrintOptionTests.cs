@@ -186,7 +186,10 @@ public sealed class PrintOptionTests
     {
         public List<(string QueueName, string? PaperName)> Submissions { get; } = [];
 
-        public void Submit(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken) =>
+        public Task SubmitAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
+        {
             Submissions.Add((queueName, paperName));
+            return Task.CompletedTask;
+        }
     }
 }

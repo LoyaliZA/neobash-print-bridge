@@ -7,33 +7,45 @@ public sealed class PdfSpoolerAdapter : ISpoolerPort
 {
     private readonly PdfDocumentPreparer _prepaper = new();
 
-    public void Submit(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
+    public async Task SubmitAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
     {
         if (document.Content is not PreparedPdf prepared || prepared.Pages.Count == 0)
         {
             throw new SpoolerPortException(started: false, "El documento preparado no trae páginas PDF.");
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        Exception? failure = null;
+        ThrowIfCancelledBeforeStart(cancellationToken);
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
             try
             {
                 Print(document.Name, prepared, queueName, paperName, cancellationToken);
+                completion.TrySetResult();
             }
             catch (Exception exception)
             {
-                failure = exception;
+                completion.TrySetException(exception);
             }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
-        thread.Join();
-        if (failure is not null)
+        })
         {
-            throw failure;
+            IsBackground = true,
+            Name = "NPB print STA",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        await completion.Task.ConfigureAwait(false);
+    }
+
+    private static void ThrowIfCancelledBeforeStart(CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException exception)
+        {
+            throw new SpoolerPortException(started: false, "La espera se canceló antes de entregar el trabajo al spooler. " + exception.Message);
         }
     }
 
@@ -125,9 +137,18 @@ public sealed class PdfSpoolerAdapter : ISpoolerPort
 
         using var nativeSession = native;
         var index = 0;
+        ThrowIfCancelledBeforeStart(cancellationToken);
         document.PrintPage += (_, args) =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException exception)
+            {
+                throw new SpoolerPortException(started: true, "La espera se canceló después de empezar el envío. Eso no confirma que el spooler haya anulado el trabajo. " + exception.Message);
+            }
+
             var current = layouts[index];
             nativeSession.Render(args, current.Page, current.Placement);
             index++;
