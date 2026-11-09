@@ -172,6 +172,8 @@ public sealed class PrintOptionTests
         public JobRecord? Find(string id) => _items.TryGetValue(id, out var record) ? record : null;
 
         public IReadOnlyList<JobRecord> List() => _items.Values.ToList();
+
+        public IReadOnlyList<string> ListIds() => _items.Keys.ToList();
     }
 
     private sealed class RecordingPreparer : IDocumentPreparer

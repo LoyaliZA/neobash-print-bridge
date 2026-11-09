@@ -25,7 +25,33 @@ public sealed class FileDiagnosticLog : IDiagnosticLog
 
         lock (_gate)
         {
-            File.AppendAllText(_path, $"{DateTimeOffset.UtcNow:O} {message}{Environment.NewLine}");
+            Append(message);
         }
+    }
+
+    public void Timing(string operation, TimeSpan elapsed, params (string Key, string Value)[] fields)
+    {
+        var suffix = fields.Length == 0
+            ? ""
+            : " " + string.Join(' ', fields.Select(FormatField));
+        var directory = Path.GetDirectoryName(_path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        lock (_gate)
+        {
+            Append($"timing operation={operation} elapsedMs={elapsed.TotalMilliseconds:0}{suffix}");
+        }
+    }
+
+    private void Append(string message) =>
+        File.AppendAllText(_path, $"{DateTimeOffset.UtcNow:O} {message}{Environment.NewLine}");
+
+    private static string FormatField((string Key, string Value) field)
+    {
+        var value = field.Value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+        return $"{field.Key}={value}";
     }
 }

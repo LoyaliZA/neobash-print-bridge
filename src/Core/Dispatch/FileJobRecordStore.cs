@@ -98,6 +98,16 @@ public sealed class FileJobRecordStore : IJobRecordStore
         }
     }
 
+    public IReadOnlyList<string> ListIds()
+    {
+        lock (_gate)
+        {
+            return Directory.EnumerateFiles(_root, "*.json")
+                .Select(path => Path.GetFileNameWithoutExtension(path))
+                .ToList();
+        }
+    }
+
     private JobRecord Require(string id)
     {
         JobIdRules.EnsureSafe(id);

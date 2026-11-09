@@ -1,3 +1,4 @@
+using Neobash.PrintBridge.Core.Capture;
 using Neobash.PrintBridge.Core.Dispatch;
 
 namespace Neobash.PrintBridge.Tests;
@@ -98,6 +99,34 @@ public sealed class DesktopStoreTests : IDisposable
         Assert.NotNull(record);
         Assert.Equal(JobPhase.SubmittedToSpooler, record.Phase);
         Assert.Equal("Quien opera vio el papel.", record.PhysicalConfirmation);
+    }
+
+    [Fact]
+    public void Recovery_snapshot_leaves_a_later_job_received()
+    {
+        var store = new FileJobRecordStore(_root);
+        store.TryBegin(new PrintJob("trabajo-previo", "application/pdf", @"C:\documentos\muestra.pdf", "dest-estable", "A4"), "Star BSC10");
+        store.Update("trabajo-previo", JobPhase.Prepared, "Páginas listas.");
+        var ids = store.ListIds();
+        store.TryBegin(new PrintJob("trabajo-nuevo", "application/pdf", @"C:\documentos\otro.pdf", "dest-estable", "A4"), "Star BSC10");
+
+        JobRecovery.MarkInterruptedAsUncertain(store, ids);
+
+        Assert.Equal(JobPhase.Uncertain, store.Find("trabajo-previo")!.Phase);
+        Assert.Equal(JobPhase.Received, store.Find("trabajo-nuevo")!.Phase);
+    }
+
+    [Fact]
+    public void Timing_line_names_the_operation_without_replacing_the_message_log()
+    {
+        var path = Path.Combine(_root, "diagnostic.log");
+        var log = new FileDiagnosticLog(path);
+        log.Timing("ui-responsive", TimeSpan.FromMilliseconds(12.4), ("baseline", "managed-entry"));
+
+        var line = File.ReadAllText(path);
+        Assert.Contains("timing operation=ui-responsive", line, StringComparison.Ordinal);
+        Assert.Contains("elapsedMs=12", line, StringComparison.Ordinal);
+        Assert.Contains("baseline=managed-entry", line, StringComparison.Ordinal);
     }
 
     [Fact]

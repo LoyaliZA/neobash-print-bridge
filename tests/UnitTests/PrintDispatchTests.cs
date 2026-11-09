@@ -303,6 +303,8 @@ public sealed class PrintDispatchTests
         public JobRecord? Find(string id) => _items.TryGetValue(id, out var record) ? record : null;
 
         public IReadOnlyList<JobRecord> List() => _items.Values.OrderBy(record => record.ReceivedAt).ToList();
+
+        public IReadOnlyList<string> ListIds() => _items.Keys.ToList();
     }
 
     private sealed class RecordingPreparer : IDocumentPreparer

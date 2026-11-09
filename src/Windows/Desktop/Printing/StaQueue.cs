@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Neobash.PrintBridge.Desktop;
 
 public sealed class StaQueue : IDisposable

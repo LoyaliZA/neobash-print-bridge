@@ -11,4 +11,6 @@ public interface IJobRecordStore
     JobRecord? Find(string id);
 
     IReadOnlyList<JobRecord> List();
+
+    IReadOnlyList<string> ListIds();
 }

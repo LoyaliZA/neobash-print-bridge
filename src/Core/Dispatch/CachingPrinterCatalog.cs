@@ -1,8 +1,12 @@
+using System.Diagnostics;
+using Neobash.PrintBridge.Core.Capture;
+
 namespace Neobash.PrintBridge.Core.Dispatch;
 
 public sealed class CachingPrinterCatalog : IPrinterCatalog
 {
     private readonly IPrinterProbe _probe;
+    private readonly IDiagnosticLog? _log;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, DetailFlight> _flights = new(StringComparer.OrdinalIgnoreCase);
     private List<InstalledQueue> _queues = [];
@@ -11,9 +15,10 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
     private Task? _refreshFlight;
     private bool _rerunRefresh;
 
-    public CachingPrinterCatalog(IPrinterProbe probe)
+    public CachingPrinterCatalog(IPrinterProbe probe, IDiagnosticLog? log = null)
     {
         _probe = probe;
+        _log = log;
     }
 
     public IReadOnlyList<string> Warnings
@@ -108,6 +113,7 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
 
                 IReadOnlyList<string>? names = null;
                 Exception? error = null;
+                var started = Stopwatch.GetTimestamp();
                 try
                 {
                     names = await Task.Run(() => _probe.ListNames(), cancellationToken).ConfigureAwait(false);
@@ -117,7 +123,10 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
                     error = exception;
                 }
 
+                var elapsed = Stopwatch.GetElapsedTime(started);
+
                 var again = false;
+                var publishTiming = false;
                 lock (_gate)
                 {
                     if (generation == _generation)
@@ -131,9 +140,21 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
                             RefreshError = error.Message;
                             _warnings = [$"No se pudo enumerar las colas: {error.Message}"];
                         }
+
+                        publishTiming = true;
                     }
 
                     again = _rerunRefresh;
+                }
+
+                if (publishTiming)
+                {
+                    _log?.Timing(
+                        "queue-name-enumeration",
+                        elapsed,
+                        ("baseline", "probe"),
+                        ("result", error is null ? "ready" : "unreadable"),
+                        ("count", (names?.Count ?? 0).ToString()));
                 }
 
                 if (!again)
@@ -155,6 +176,7 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
     {
         InstalledQueue? read = null;
         Exception? error = null;
+        var started = Stopwatch.GetTimestamp();
         try
         {
             read = await Task.Run(() => _probe.ReadDetails(queueName), cancellationToken).ConfigureAwait(false);
@@ -164,6 +186,9 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
             error = exception;
         }
 
+        var elapsed = Stopwatch.GetElapsedTime(started);
+        InstalledQueue? published = null;
+        string? outcome = null;
         lock (_gate)
         {
             if (_flights.TryGetValue(queueName, out var flight) && flight.Generation == generation)
@@ -179,21 +204,37 @@ public sealed class CachingPrinterCatalog : IPrinterCatalog
             if (error is not null)
             {
                 MarkUnreadableLocked(queueName, error.Message);
-                return null;
+                outcome = "unreadable";
             }
-
-            if (read is null)
+            else if (read is null)
             {
                 MarkUnreadableLocked(queueName, "La cola ya no está disponible.");
-                return null;
+                outcome = "unreadable";
             }
-
-            var ready = read with { QueueName = queueName, Detail = QueueDetail.Ready };
-            ReplaceLocked(ready);
-            _warnings.RemoveAll(warning => warning.Contains($"«{queueName}»", StringComparison.OrdinalIgnoreCase));
-            return ready;
+            else
+            {
+                published = read with { QueueName = queueName, Detail = QueueDetail.Ready };
+                ReplaceLocked(published);
+                _warnings.RemoveAll(warning => warning.Contains($"«{queueName}»", StringComparison.OrdinalIgnoreCase));
+                outcome = "ready";
+            }
         }
+
+        if (outcome is not null)
+        {
+            LogCapabilities(queueName, elapsed, outcome);
+        }
+
+        return published;
     }
+
+    private void LogCapabilities(string queueName, TimeSpan elapsed, string outcome) =>
+        _log?.Timing(
+            "queue-capabilities",
+            elapsed,
+            ("baseline", "probe"),
+            ("queue", queueName),
+            ("result", outcome));
 
     private bool TryCached(string queueName, out InstalledQueue? cached)
     {
