@@ -12,27 +12,19 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="Todas" Click="OnFilterClick" Tag="all" />
                     <Button Content="Físicas" Click="OnFilterClick" Tag="physical" />
-                    <Button Content="Virtual" Click="OnFilterClick" Tag="virtual" />
+                    <Button Content="Software" Click="OnFilterClick" Tag="software" />
+                    <Button Content="NPB" Click="OnFilterClick" Tag="virtual" />
                     <Button Content="Actualizar" Style="{StaticResource NpbQuietButton}" Click="OnRefresh" />
                 </StackPanel>
             </StackPanel>
             <TextBlock x:Name="EmptyText" Text="No hay colas que coincidan con esta búsqueda." Foreground="{StaticResource NpbMutedBrush}" Visibility="Collapsed" />
             <ItemsControl x:Name="List">
                 <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="280" /></ItemsPanelTemplate>
+                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="264" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:DeviceCardModel">
-                        <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalContentAlignment="Stretch" Click="OnOpen" Tag="{x:Bind QueueName}">
-                            <Border Style="{StaticResource NpbCard}" Margin="0,0,16,16">
-                                <StackPanel Spacing="10">
-                                    <local:DeviceArt Category="{x:Bind Art}" />
-                                    <TextBlock Text="{x:Bind QueueName}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource NpbInkBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind KindLabel}" Foreground="{StaticResource NpbMutedBrush}" />
-                                    <TextBlock Text="{x:Bind Status}" Foreground="{StaticResource NpbIndigoBrush}" />
-                                </StackPanel>
-                            </Border>
-                        </Button>
+                        <local:DeviceCard Model="{x:Bind}" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

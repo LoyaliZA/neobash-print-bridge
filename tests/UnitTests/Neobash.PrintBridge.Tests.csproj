@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\..\src\Windows\Desktop\Printing\WindowsQueueObserver.cs" Link="Desktop\WindowsQueueObserver.cs" />
     <Compile Include="..\..\src\Windows\Desktop\Session\DesktopSession.cs" Link="Desktop\DesktopSession.cs" />
     <Compile Include="..\..\src\Windows\Desktop\Session\IUiQueue.cs" Link="Desktop\IUiQueue.cs" />
     <Compile Include="..\..\src\Windows\Desktop\DesktopHost.cs" Link="Desktop\DesktopHost.cs" />

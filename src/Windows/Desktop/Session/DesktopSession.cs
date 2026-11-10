@@ -30,6 +30,14 @@ public sealed class DesktopSession
         Status = "Cargando colas…";
     }
 
+    public IReadOnlyDictionary<string, QueueObservation> Observations { get; private set; } = new Dictionary<string, QueueObservation>();
+    public QueueObservation? Observation(string name) => Observations.GetValueOrDefault(name);
+    public void ApplyObservations(IReadOnlyDictionary<string, QueueObservation> observations)
+    {
+        Observations = observations;
+        Notify();
+    }
+
     public event Action? Changed;
 
     public string Status { get; private set; }

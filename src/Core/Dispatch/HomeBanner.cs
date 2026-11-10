@@ -4,7 +4,7 @@ public static class HomeBanner
 {
     public const string NeutralTitle = "Estas son las impresoras de este equipo";
 
-    public const string ReadyTitle = "Todo listo para imprimir";
+    public const string ReadyTitle = "Destino configurado";
 
     public const string NeutralSubtitle = "Una cola instalada no confirma que haya papel.";
 

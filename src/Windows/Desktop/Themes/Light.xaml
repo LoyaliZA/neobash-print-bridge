@@ -13,6 +13,7 @@
     <SolidColorBrush x:Key="NpbIndigoSoftBrush" Color="#EEEDFC" />
     <SolidColorBrush x:Key="NpbReadyBrush" Color="#0F7A45" />
     <SolidColorBrush x:Key="NpbReadySoftBrush" Color="#E7F6EE" />
+    <SolidColorBrush x:Key="NpbPausedBrush" Color="#7953A6" />
     <SolidColorBrush x:Key="NpbWarnBrush" Color="#8A5A00" />
     <SolidColorBrush x:Key="NpbWarnSoftBrush" Color="#FDF2E4" />
     <SolidColorBrush x:Key="NpbQuietBrush" Color="#F4F2F8" />

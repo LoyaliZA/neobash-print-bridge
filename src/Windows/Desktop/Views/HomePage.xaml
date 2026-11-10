@@ -5,7 +5,7 @@
     xmlns:local="using:Neobash.PrintBridge.Desktop"
     Background="{StaticResource NpbCanvasBrush}">
     <ScrollViewer>
-        <StackPanel Padding="28" Spacing="24">
+        <StackPanel Padding="28" Spacing="16">
             <Border Background="{StaticResource NpbIndigoBrush}" CornerRadius="20" Padding="28">
                 <StackPanel Spacing="8">
                     <TextBlock Text="TU ESPACIO DE IMPRESIÓN" Foreground="White" FontSize="12" CharacterSpacing="80" />
@@ -20,26 +20,27 @@
             </Grid>
             <TextBlock x:Name="StatusText" Foreground="{StaticResource NpbMutedBrush}" TextWrapping="Wrap" />
 
-            <TextBlock Text="Físicas" FontWeight="SemiBold" />
-            <TextBlock x:Name="PhysicalEmpty" Text="Windows todavía no anuncia colas físicas." Foreground="{StaticResource NpbMutedBrush}" Visibility="Collapsed" />
+            <TextBlock Text="Impresoras y otras colas" FontWeight="SemiBold" />
+            <TextBlock x:Name="PhysicalEmpty" Text="Windows todavía no anuncia impresoras." Foreground="{StaticResource NpbMutedBrush}" Visibility="Collapsed" />
             <ItemsControl x:Name="PhysicalList">
                 <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="280" /></ItemsPanelTemplate>
+                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="264" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:DeviceCardModel">
-                        <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnOpen" Tag="{x:Bind QueueName}">
-                            <Border Style="{StaticResource NpbCard}" Margin="0,0,16,16">
-                                <StackPanel Spacing="12">
-                                    <local:DeviceArt Category="{x:Bind Art}" />
-                                    <TextBlock Text="{x:Bind QueueName}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource NpbInkBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind KindLabel}" Foreground="{StaticResource NpbMutedBrush}" />
-                                    <Border Background="{StaticResource NpbReadySoftBrush}" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left">
-                                        <TextBlock Text="{x:Bind Status}" Foreground="{StaticResource NpbReadyBrush}" FontSize="12" />
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-                        </Button>
+                        <local:DeviceCard Model="{x:Bind}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="Impresoras de software" FontWeight="SemiBold" />
+            <ItemsControl x:Name="SoftwareList">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="264" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:DeviceCardModel">
+                        <local:DeviceCard Model="{x:Bind}" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -48,22 +49,11 @@
             <TextBlock x:Name="VirtualEmpty" Text="La impresora virtual no se comprobó en este arranque." Foreground="{StaticResource NpbMutedBrush}" Visibility="Collapsed" />
             <ItemsControl x:Name="VirtualList">
                 <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="280" /></ItemsPanelTemplate>
+                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="264" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:DeviceCardModel">
-                        <Button Background="Transparent" BorderThickness="0" Padding="0" HorizontalContentAlignment="Stretch" Click="OnOpen" Tag="{x:Bind QueueName}">
-                            <Border Style="{StaticResource NpbCard}" Margin="0,0,16,16">
-                                <StackPanel Spacing="12">
-                                    <local:DeviceArt Category="{x:Bind Art}" />
-                                    <TextBlock Text="{x:Bind QueueName}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource NpbInkBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind KindLabel}" Foreground="{StaticResource NpbMutedBrush}" />
-                                    <Border Background="{StaticResource NpbIndigoSoftBrush}" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left">
-                                        <TextBlock Text="{x:Bind Status}" Foreground="{StaticResource NpbIndigoBrush}" FontSize="12" />
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-                        </Button>
+                        <local:DeviceCard Model="{x:Bind}" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

@@ -5,20 +5,20 @@
     xmlns:local="using:Neobash.PrintBridge.Desktop">
     <ScrollViewer>
         <StackPanel Padding="28" Spacing="16">
-            <Button Content="Impresoras" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnBack" />
+            <Button x:Name="BackButton" Content="Impresoras" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnBack" />
             <Border Style="{StaticResource NpbCard}">
                 <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180" />
+                        <ColumnDefinition Width="96" />
                         <ColumnDefinition />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <local:DeviceArt x:Name="Art" Grid.Column="0" />
                     <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock x:Name="NameText" FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock x:Name="KindText" Foreground="{StaticResource NpbMutedBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="NameText"  FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="KindText"  Foreground="{StaticResource NpbMutedBrush}" TextWrapping="Wrap" />
                         <Border Background="{StaticResource NpbIndigoSoftBrush}" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left">
-                            <TextBlock x:Name="StatusText" Foreground="{StaticResource NpbIndigoBrush}" />
+                            <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="{StaticResource NpbIndigoBrush}" />
                         </Border>
                     </StackPanel>
                     <Button x:Name="PrintButton" Grid.Column="2" Content="Imprimir" Style="{StaticResource NpbPrimaryButton}" VerticalAlignment="Center" Click="OnPrint" />

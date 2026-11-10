@@ -3,16 +3,20 @@ using Neobash.PrintBridge.Core.Dispatch;
 
 namespace Neobash.PrintBridge.Desktop;
 
-public sealed class DeviceCardModel
+public sealed record DeviceCardModel
 {
-    public required string QueueName { get; init; }
+    public string QueueName { get; init; } = "";
 
-    public required string KindLabel { get; init; }
+    public string KindLabel { get; init; } = "";
 
-    public required string Status { get; init; }
+    public string Status { get; init; } = "Estado no confirmado";
 
-    public required string Art { get; init; }
+    public string Art { get; init; } = "Physical";
 
+    public string Tone { get; init; } = "Unknown";
+    public int SortOrder { get; init; }
+
+    public bool IsSoftware { get; init; }
     public bool IsVirtual { get; init; }
 }
 
@@ -30,6 +34,8 @@ public sealed class HomeViewModel : Bindable
 
     public ObservableCollection<DeviceCardModel> Physical { get; } = [];
 
+    public ObservableCollection<DeviceCardModel> Software { get; } = [];
+
     public ObservableCollection<DeviceCardModel> Virtual { get; } = [];
 
     public void Refresh(DesktopSession session)
@@ -46,29 +52,37 @@ public sealed class HomeViewModel : Bindable
         var failed = session.CatalogFailed;
         Title = HomeBanner.Title(session.CatalogWaiting, failed, active, activeQueue);
         Subtitle = HomeBanner.Subtitle(session.CatalogWaiting, failed, active, activeQueue);
-        Replace(Physical, installed.Where(queue => !DevicePresentation.IsKnownVirtual(queue)).Select(queue => Card(queue, DeviceKind.Physical)));
-        Replace(Virtual, installed.Where(DevicePresentation.IsKnownVirtual).Select(queue => Card(queue, DeviceKind.Virtual)));
+        var cards = installed.Select(queue => Card(queue, DevicePresentation.Kind(queue, session.Observation(queue.QueueName)), session.Observation(queue.QueueName)))
+            .OrderBy(card => card.SortOrder).ThenBy(card => card.QueueName, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        Replace(Physical, cards.Where(card => !card.IsVirtual && !card.IsSoftware));
+        Replace(Software, cards.Where(card => card.IsSoftware));
+        Replace(Virtual, cards.Where(card => card.IsVirtual));
     }
 
     public static IReadOnlyList<InstalledQueue> ReadInstalled(DesktopSession session) => session.Installed;
 
-    public static DeviceCardModel Card(InstalledQueue queue, DeviceKind kind)
+    public static DeviceCardModel Card(InstalledQueue queue, DeviceKind kind, QueueObservation? observation = null)
     {
         var art = DevicePresentation.Art(queue, kind);
         return new DeviceCardModel
         {
             QueueName = queue.QueueName,
-            KindLabel = kind == DeviceKind.Virtual ? "Impresora virtual" : "Impresora física",
-            Status = DevicePresentation.Status(queue, kind, true),
+            KindLabel = DevicePresentation.KindLabel(kind),
+            Status = observation?.Describe(DateTimeOffset.UtcNow) ?? "Estado no confirmado",
+            Tone = (observation?.Operation(DateTimeOffset.UtcNow) ?? QueueOperation.Unknown).ToString(),
+            SortOrder = QueueObservation.SortOrder(observation?.Operation(DateTimeOffset.UtcNow) ?? QueueOperation.Unknown),
             Art = art.ToString(),
+            IsSoftware = kind == DeviceKind.Software,
             IsVirtual = kind == DeviceKind.Virtual,
         };
     }
 
-    private static void Replace(ObservableCollection<DeviceCardModel> target, IEnumerable<DeviceCardModel> items)
+    public static void Replace(ObservableCollection<DeviceCardModel> target, IEnumerable<DeviceCardModel> items)
     {
+        var snapshot = items.ToArray();
+        if (target.SequenceEqual(snapshot)) return;
         target.Clear();
-        foreach (var item in items)
+        foreach (var item in snapshot)
         {
             target.Add(item);
         }

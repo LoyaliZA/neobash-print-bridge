@@ -22,6 +22,7 @@ public sealed partial class HomePage : Page, ISessionPage
         SubtitleText.Text = _model.Subtitle;
         StatusText.Text = _model.Status;
         PhysicalList.ItemsSource = _model.Physical;
+        SoftwareList.ItemsSource = _model.Software;
         VirtualList.ItemsSource = _model.Virtual;
         PhysicalEmpty.Visibility = _model.Physical.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         VirtualEmpty.Visibility = _model.Virtual.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

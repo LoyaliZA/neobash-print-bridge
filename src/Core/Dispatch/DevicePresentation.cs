@@ -4,6 +4,8 @@ public enum DeviceKind
 {
     Physical,
     Virtual,
+    Software,
+    Unknown,
 }
 
 public enum DeviceArtCategory
@@ -50,7 +52,7 @@ public static class DevicePresentation
 
     public static DeviceArtCategory Art(InstalledQueue? queue, DeviceKind kind)
     {
-        if (kind == DeviceKind.Virtual)
+        if (kind is DeviceKind.Virtual or DeviceKind.Software)
         {
             return DeviceArtCategory.Virtual;
         }
@@ -65,6 +67,30 @@ public static class DevicePresentation
 
         return DeviceArtCategory.Physical;
     }
+
+    public static DeviceKind Kind(InstalledQueue queue, QueueObservation? observation = null)
+    {
+        if (IsKnownVirtual(queue)) return DeviceKind.Virtual;
+        var driver = observation?.DriverName ?? queue.DriverName;
+        var name = queue.QueueName + " " + driver;
+        if (new[] { "Microsoft Print to PDF", "Microsoft XPS", "OneNote", "PDFCreator", "PDF24", "Adobe PDF", "Fax" }
+            .Any(value => name.Contains(value, StringComparison.OrdinalIgnoreCase))) return DeviceKind.Software;
+        var port = observation?.PortName ?? "";
+        if (port.Contains("PORTPROMPT", StringComparison.OrdinalIgnoreCase) || port.Equals("FILE:", StringComparison.OrdinalIgnoreCase))
+            return DeviceKind.Software;
+        if (port.StartsWith("USB", StringComparison.OrdinalIgnoreCase) || port.StartsWith("WSD", StringComparison.OrdinalIgnoreCase)
+            || port.StartsWith("IP_", StringComparison.OrdinalIgnoreCase) || port.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)
+            || port.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return DeviceKind.Physical;
+        return DeviceKind.Unknown;
+    }
+
+    public static string KindLabel(DeviceKind kind) => kind switch
+    {
+        DeviceKind.Virtual => "Cola virtual NPB",
+        DeviceKind.Software => "Impresora de software",
+        DeviceKind.Physical => "Impresora física",
+        _ => "Cola · tipo sin verificar",
+    };
 
     public static bool IsKnownVirtual(InstalledQueue queue) =>
         string.Equals(queue.QueueName, PhysicalQueueRules.VirtualQueueName, StringComparison.OrdinalIgnoreCase)

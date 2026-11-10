@@ -1,9 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Neobash.PrintBridge.Core.Dispatch;
-using Microsoft.UI;
 
 namespace Neobash.PrintBridge.Desktop;
 
@@ -12,7 +10,10 @@ public sealed partial class MainWindow : Window
     private readonly DesktopHost _host;
     private readonly Dictionary<string, UIElement> _pages = new(StringComparer.Ordinal);
     private bool _activatedLogged;
-    private string? _pendingQueue;
+    private readonly WindowsQueueObserver _observer = new();
+    private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+    private readonly DesktopNavigation _navigation = new();
+    public string ReturnSection => _navigation.ReturnSection;
 
     public MainWindow(DesktopHost host, IPreferenceStore preferences)
     {
@@ -23,11 +24,14 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         AppServices.Window = this;
         Closed += OnClosed;
+        _statusTimer.Tick += async (_, _) => await RefreshOperationsAsync();
+        _statusTimer.Start();
+        Session.Changed += OnSessionChanged;
         Activated += OnActivated;
         SizeChanged += OnSizeChanged;
-        TryIntegrateTitleBar();
+        // Keep the native title bar: Windows reserves caption buttons and drag space.
         Nav.SelectedItem = Nav.MenuItems[0];
-        Show("home");
+        ShowCurrent();
     }
 
     public DesktopSession Session { get; }
@@ -36,38 +40,57 @@ public sealed partial class MainWindow : Window
 
     public WindowUiQueue Ui { get; }
 
+    private bool _firstPoll;
+    private void OnSessionChanged()
+    {
+        if (!_firstPoll && Session.NamesReady)
+        {
+            _firstPoll = true;
+            _ = RefreshOperationsAsync();
+        }
+    }
+
+    private async Task RefreshOperationsAsync()
+    {
+        // Expire displayed evidence even if an earlier native query is still blocked.
+        Session.ApplyObservations(Session.Observations);
+        var names = Session.Installed.Select(q => q.QueueName).ToArray();
+        var result = await _observer.RefreshAsync(names);
+        if (result is not null) Session.ApplyObservations(result);
+    }
+
     public void BeginStartup() => Session.BeginStartup();
 
     public void OpenPrinter(string queueName)
     {
-        _pendingQueue = queueName;
-        Show("detail");
-        if (_pages.TryGetValue("detail", out var page) && page is PrinterDetailPage detail)
-        {
-            detail.ShowQueue(queueName);
-        }
+        _navigation.OpenPrinter(queueName);
+        ShowCurrent();
     }
 
     public void OpenSection(string tag)
     {
-        foreach (var item in Nav.MenuItems.OfType<NavigationViewItem>())
-        {
-            if (string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
-            {
-                Nav.SelectedItem = item;
-                return;
-            }
-        }
-
-        Show(tag);
+        _navigation.OpenSection(tag);
+        Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => item.Tag as string == tag);
+        ShowCurrent();
     }
 
-    private void OnNavigate(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    public void GoBack()
     {
-        if (args.SelectedItem is NavigationViewItem item && item.Tag is string tag)
-        {
-            Show(tag);
-        }
+        _navigation.GoBack();
+        ShowCurrent();
+    }
+
+    private void OnBack(NavigationView sender, NavigationViewBackRequestedEventArgs args) => GoBack();
+
+    private void OnNavigate(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (args.InvokedItemContainer?.Tag is string tag) OpenSection(tag);
+    }
+
+    private void ShowCurrent()
+    {
+        Nav.IsBackEnabled = _navigation.CanGoBack;
+        Show(_navigation.Current.Section);
     }
 
     private void Show(string tag)
@@ -94,17 +117,18 @@ public sealed partial class MainWindow : Window
             sessionPage.Activate();
         }
 
-        if (tag == "detail" && page is PrinterDetailPage detail && _pendingQueue is not null)
+        if (tag == "detail" && page is PrinterDetailPage detail && _navigation.Current.QueueName is not null)
         {
-            detail.ShowQueue(_pendingQueue);
+            detail.ShowQueue(_navigation.Current.QueueName);
         }
     }
 
     private void OnSizeChanged(object sender, WindowSizeChangedEventArgs args)
     {
+        BrandSubtitle.Visibility = args.Size.Width < 550 ? Visibility.Collapsed : Visibility.Visible;
         Nav.PaneDisplayMode = args.Size.Width switch
         {
-            < 880 => NavigationViewPaneDisplayMode.Top,
+            < 880 => NavigationViewPaneDisplayMode.LeftMinimal,
             < 1100 => NavigationViewPaneDisplayMode.LeftCompact,
             _ => NavigationViewPaneDisplayMode.Left,
         };
@@ -123,26 +147,12 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _statusTimer.Stop();
         _host.Log.Write("Ventana cerrada. El proceso termina.");
         Application.Current.Exit();
     }
 
-    private void TryIntegrateTitleBar()
-    {
-        try
-        {
-            ExtendsContentIntoTitleBar = true;
-            var titleBar = AppWindow.TitleBar;
-            titleBar.ExtendsContentIntoTitleBar = true;
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-            titleBar.ButtonForegroundColor = Microsoft.UI.ColorHelper.FromArgb(255, 28, 27, 41);
-        }
-        catch (Exception exception)
-        {
-            _host.Log.Write("La barra de título integrada no está disponible. " + exception.Message);
-        }
-    }
+
 }
 
 public interface ISessionPage

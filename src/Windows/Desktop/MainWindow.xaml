@@ -4,25 +4,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Neobash Print Bridge">
     <Grid Background="{StaticResource NpbCanvasBrush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid Padding="20,10" ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource NpbIndigoBrush}">
+                <FontIcon Glyph="&#xE749;" Foreground="White" FontSize="16" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="Neobash Print Bridge" TextWrapping="Wrap" FontWeight="SemiBold" />
+                <TextBlock x:Name="BrandSubtitle" Text="Centro de dispositivos" FontSize="12" Foreground="{StaticResource NpbMutedBrush}" />
+            </StackPanel>
+        </Grid>
         <NavigationView
-            x:Name="Nav"
-            IsBackButtonVisible="Collapsed"
+            x:Name="Nav" Grid.Row="1"
+            IsBackButtonVisible="Visible"
+            IsBackEnabled="False"
+            BackRequested="OnBack"
             IsSettingsVisible="False"
             PaneDisplayMode="Left"
-            OpenPaneLength="220"
+            OpenPaneLength="240"
             CompactPaneLength="72"
-            SelectionChanged="OnNavigate">
-            <NavigationView.PaneHeader>
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="8,8,8,16">
-                    <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource NpbIndigoBrush}">
-                        <FontIcon Glyph="&#xE749;" Foreground="White" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Neobash Print Bridge" FontWeight="SemiBold" Foreground="{StaticResource NpbInkBrush}" />
-                        <TextBlock Text="Centro de dispositivos" FontSize="12" Foreground="{StaticResource NpbMutedBrush}" />
-                    </StackPanel>
-                </StackPanel>
-            </NavigationView.PaneHeader>
+            ItemInvoked="OnNavigate">
             <NavigationView.MenuItems>
                 <NavigationViewItem Tag="home" Content="Inicio">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>

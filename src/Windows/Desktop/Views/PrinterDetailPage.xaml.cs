@@ -14,17 +14,17 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
         AppServices.Window.Session.Changed += Refresh;
     }
 
+    private void OnBack(object sender, RoutedEventArgs e) => AppServices.Window.GoBack();
+
     public void Activate() => Refresh();
 
     public void ShowQueue(string queueName)
     {
         _queueName = queueName;
+        BackButton.Content = AppServices.Window.ReturnSection == "printers" ? "← Mis impresoras" : "← Inicio";
+        AppServices.Window.Session.SelectQueue(queueName);
         Refresh();
-        var known = AppServices.Window.Session.Installed.FirstOrDefault(queue => string.Equals(queue.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
-        if (known is { Detail: QueueDetail.NameOnly })
-        {
-            _ = AppServices.Window.Session.LoadDetailsAsync(queueName);
-        }
+
     }
 
     private void Refresh()
@@ -37,13 +37,18 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
         var queue = AppServices.Window.Session.Installed.FirstOrDefault(item => string.Equals(item.QueueName, _queueName, StringComparison.OrdinalIgnoreCase));
         var virtualQueue = queue is not null && DevicePresentation.IsKnownVirtual(queue);
         NameText.Text = _queueName;
-        KindText.Text = virtualQueue
-            ? "Impresora virtual"
-            : queue is null
-                ? "La cola no está en el catálogo de este arranque."
-                : "Impresora física · " + (string.IsNullOrWhiteSpace(queue.DriverName) ? "controlador no leído" : queue.DriverName);
-        var kind = virtualQueue ? DeviceKind.Virtual : DeviceKind.Physical;
-        StatusText.Text = DevicePresentation.Status(queue, kind, queue is not null);
+        var observation = AppServices.Window.Session.Observation(_queueName);
+        var kind = queue is null ? DeviceKind.Unknown : DevicePresentation.Kind(queue, observation);
+        KindText.Text = DevicePresentation.KindLabel(kind) + " · " + (observation?.DriverName ?? queue?.DriverName ?? "controlador no leído");
+        StatusText.Text = (observation?.Describe(DateTimeOffset.UtcNow) ?? "Estado no confirmado")
+            + " · " + DevicePresentation.Status(queue, kind, queue is not null);
+        var operation = observation?.Operation(DateTimeOffset.UtcNow) ?? QueueOperation.Unknown;
+        var colorKey = operation switch
+        {
+            QueueOperation.Available => "NpbReadyBrush", QueueOperation.Printing or QueueOperation.Busy => "NpbIndigoBrush",
+            QueueOperation.Attention => "NpbWarnBrush", QueueOperation.Paused => "NpbPausedBrush", _ => "NpbMutedBrush",
+        };
+        StatusText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[colorKey];
         Art.Category = DevicePresentation.Art(queue, kind).ToString();
         DestinationSection.Visibility = virtualQueue ? Visibility.Collapsed : Visibility.Visible;
         VirtualNote.Visibility = virtualQueue ? Visibility.Visible : Visibility.Collapsed;
@@ -70,11 +75,9 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
 
     private UIElement BuildRow(PrintDestination destination, bool active)
     {
-        var panel = new Grid { ColumnSpacing = 12 };
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var panel = new StackPanel { Spacing = 12 };
         var text = new StackPanel();
-        text.Children.Add(new TextBlock { Text = destination.DisplayName, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        text.Children.Add(new TextBlock { Text = destination.DisplayName, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         text.Children.Add(new TextBlock
         {
             Text = destination.Defaults?.Describe() ?? destination.PaperName ?? "Sin papel guardado",
@@ -86,12 +89,10 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
             text.Children.Add(new TextBlock { Text = "Activo", Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["NpbReadyBrush"] });
         }
 
-        Grid.SetColumn(text, 0);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(Action("Usar", () => Use(destination)));
         actions.Children.Add(Action("Editar", () => _ = EditAsync(destination)));
         actions.Children.Add(Action("Eliminar", () => _ = DeleteAsync(destination)));
-        Grid.SetColumn(actions, 1);
         panel.Children.Add(text);
         panel.Children.Add(actions);
         return new Border
@@ -239,5 +240,5 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
 
     private void OnAccess(object sender, RoutedEventArgs e) => AppServices.Window.OpenSection("access");
 
-    private void OnBack(object sender, RoutedEventArgs e) => AppServices.Window.OpenSection("printers");
+
 }
