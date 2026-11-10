@@ -83,7 +83,9 @@ flowchart LR
 
 En el MVP hay una cola virtual y un destino remoto vinculado. La vinculación es un permiso guardado, no un alta de colas en Windows. El manifiesto sigue con una sola `PrintSupportVirtualPrinter`.
 
-El Incremento 1 puede probar el receptor con un PDF ya existente, sin esperar a la cola virtual. El contrato del mensaje es el mismo que usará el Incremento 3: dispositivo, identificador de origen, destino, tipo `application/pdf` y cuerpo completo. Un OXPS no entra por ese receptor.
+El Incremento 1 puede probar el receptor con un PDF ya existente, sin esperar a la cola virtual. El contrato del mensaje es el mismo que usará el Incremento 3: dispositivo, identificador de origen, identificador de un destino ya publicado, tipo `application/pdf` y cuerpo completo. El mensaje no lleva un nombre de cola de Windows. Un OXPS no entra por ese receptor.
+
+El destino que el cliente puede elegir sale de SQLite del agente. `destinations.json` de Desktop no se lee ni se escribe en ese camino.
 
 El agente escucha en la red local del equipo anfitrión. No se publica en Internet. Este incremento no crea la regla de firewall; el documento de seguridad dice cuál tendría que aplicar quien opera el equipo, más adelante y a mano.
 
@@ -91,17 +93,18 @@ El agente escucha en la red local del equipo anfitrión. No se publica en Intern
 
 ```mermaid
 sequenceDiagram
+  participant operador as QuienOpera
+  participant agente as PantallaLocalDelAgente
   participant cliente as EquipoCliente
-  participant agente as AgenteEnSesionInteractiva
-  cliente->>agente: CodigoDeUnSoloUso
-  agente->>cliente: HuellaDelCertificadoDelAnfitrion
-  note over cliente,agente: El codigo queda gastado
-  cliente->>agente: TlsYCredencialDeDispositivo
-  agente->>agente: ValidaCertificadoYPermisoDeDestino
-  agente-->>cliente: AceptadaRechazadaOConflicto
+  operador->>agente: LeeCodigoYHuellaEnElEquipoAnfitrion
+  operador->>cliente: LosEscribePorEseCanal
+  note over cliente: La huella no se toma del socket
+  cliente->>agente: TlsConLaHuellaYaVerificada
+  agente->>agente: CodigoVigenciaUsoEIdentidad
+  agente-->>cliente: CredencialORechazo
 ```
 
-No hay emparejamiento en el código actual. La página de Accesos lo dice. La UI llega en el Incremento 4. Los controles no esperan a esa UI: el Incremento 1 ya autentica, autoriza el destino y valida TLS de verdad. Sin credencial no hay trabajo. Sin permiso sobre ese destino no hay trabajo. Un callback que acepte cualquier certificado no cumple este contrato.
+No hay emparejamiento en el código actual. La página de Accesos lo dice. La UI llega en el Incremento 4. Los controles no esperan a esa UI: el Incremento 1 ya autentica, autoriza el destino publicado y valida TLS de verdad. Sin credencial no hay trabajo. Sin un destino publicado y concedido no hay trabajo. Una huella que solo anuncia el servidor, antes de estar autenticado, no se guarda. Un callback que acepte cualquier error TLS no cumple este contrato.
 
 El detalle de certificado, almacén de secretos, revocación y renovación está en `04-seguridad.md`.
 
@@ -138,6 +141,8 @@ stateDiagram-v2
 ```
 
 `JobPhase` sigue siendo el enum de `src/Core/Dispatch/JobPhase.cs`: `Received`, `Prepared`, `SubmittedToSpooler`, `Failed`, `Uncertain`. La confirmación física no es un valor de ese enum. `FileJobRecordStore.RecordPhysicalConfirmation` solo escribe el campo cuando la fase ya es `SubmittedToSpooler`, y la prueba `Physical_confirmation_is_stored_without_changing_the_spooler_phase` comprueba que la fase no cambia.
+
+El despacho del agente espera al commit. El orden fijo es: archivo temporal, validación, publicación del archivo, commit SQLite y solo entonces `PrintDispatcher`. Una segunda petición con la misma clave no abre otro despacho. El detalle está en `05-datos-y-estados.md`.
 
 `JobCaptureStatus` (`Succeeded`, `Failed`, `Canceled`) solo cierra la tarea ante Windows. Una captura `Succeeded` no significa `SubmittedToSpooler` ni papel.
 
@@ -178,9 +183,33 @@ Esto extiende lo que `JobRecovery` ya hace en Desktop, no lo contradice.
 | Pieza | Hoy | Contrato del MVP |
 | --- | --- | --- |
 | Ventana WinUI | `src/Windows/Desktop`, proceso aparte, no empaquetado | Sigue siendo la ventana. No hospeda el receptor. |
+| Motor PDF | Tres tipos dentro de ese proyecto WinUI | Biblioteca Windows compartida, sin WinUI, usada por la ventana y por el agente. |
 | Tarea de la cola virtual | Dentro del paquete, al imprimir | Sigue cerrando el trabajo ante Windows. No se convierte en el agente. |
-| Agente | Plantilla en `src/Agent` | Proceso distinto, en la sesión interactiva de quien opera el equipo anfitrión. |
+| Agente | Plantilla en `src/Agent`, solo referencia Core | Proceso distinto, en la sesión interactiva, con la biblioteca y sin referenciar la ventana. |
+| Destinos LAN | No existen. Desktop guarda los suyos en `destinations.json` | SQLite del agente. El JSON de Desktop no se comparte. |
 | Servicio de Windows | No existe en el repositorio | Alternativa futura, sujeta a prueba. No se declara imposible. |
+
+## Biblioteca compartida del motor PDF
+
+No existe todavía. El Incremento 1 la crea y no cambia el comportamiento de los tres tipos.
+
+```mermaid
+flowchart LR
+  core[CoreSinWinUI] --> biblioteca[BibliotecaWindowsSinWinUI]
+  biblioteca --> desktop[VentanaWinUI]
+  biblioteca --> agente[AgenteEnSesionInteractiva]
+  desktop -.->|no| agente
+```
+
+La biblioteca recibe, sin modificar su lógica, `PdfDocumentPreparer`, `PdfiumPrintSession` y `PdfSpoolerAdapter`. Para que el agente pueda ejecutar el mismo `PrintDispatcher`, también recibe la sonda de colas `WindowsPrinterProbe` y el `StaQueue` que esa sonda ya usa. La vista previa (`PdfPagePreview`, `PreviewPaperReader`) y el XAML se quedan en Desktop.
+
+`PrintDispatcher` y `PageLayoutCalculator` no se mueven: ya están en Core. El agente no referencia el csproj de Desktop ni activa `UseWinUI`. El csproj del agente, hoy `net10.0`, pasa al mismo moniker de Windows que la biblioteca (`net10.0-windows10.0.26100.0`, x64) porque PDFium, GDI y `Windows.Data.Pdf` no caben en el moniker actual. Eso no añade el SDK de WinUI.
+
+Cómo se comprueba, dentro del Incremento 1:
+
+- Compilación: se construyen la biblioteca, el agente y Desktop para `win-x64`. El agente no referencia Desktop. Ni el agente ni la biblioteca contienen `UseWinUI` ni `Microsoft.WindowsAppSDK`.
+- Dependencias: la biblioteca queda con `System.Drawing.Common` 10.0.0 y `bblanchon.PDFium.Win32` 157.0.8100, las mismas versiones del csproj de Desktop. Core sigue sin WinUI. Las licencias de `docs/third-party/pdfium` se copian también junto al ejecutable del agente; hoy ese `Content` está solo en el csproj de Desktop. El repositorio no tiene un proyecto sin WinUI que ya compile `Windows.Data.Pdf`: la compilación de la biblioteca es la prueba de que `PdfDocumentPreparer` no necesita el paquete de la ventana. Si hiciera falta el mismo puente CsWinRT que Desktop ya usa para el SDK de Windows, se anota y se limita a eso. No se responde añadiendo `UseWinUI`.
+- Ejecución desde el agente interactivo: un proceso del agente, no la ventana, construye el preparador y el adaptador compartidos y recorre `PrintDispatcher` contra un sustituto del spooler. El hilo sigue llamándose `NPB print STA`. `tests/WindowsPrintTests` pasa a referenciar la biblioteca en lugar de compilar el archivo suelto de Desktop, y sigue sin abrir WinUI. Las pruebas de Core del despacho no cambian de resultado.
 
 `PdfSpoolerAdapter` crea un hilo STA y usa `System.Drawing.Printing`. Eso obliga a comprobar el entorno donde se llame. No es, por sí solo, una prohibición permanente de la sesión 0: este repositorio nunca ejecuta el adaptador como servicio, así que tampoco demuestra que la sesión 0 falle o funcione.
 

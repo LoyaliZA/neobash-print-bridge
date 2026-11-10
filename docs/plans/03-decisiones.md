@@ -122,9 +122,9 @@ No hay SQLite en el árbol. El contrato, para el almacén nuevo, es este:
 
 - Un archivo de base, en modo WAL, solo del agente.
 - La clave `dispositivo + identificador de origen` es única.
-- El cuerpo se escribe en un temporal, se cierra y se vuelca a disco. Solo entonces una transacción inserta la clave, el resumen del cuerpo, el destino y la fila en `Received`. Si el proceso muere antes del commit, no hay fila: al arrancar se borran temporales sin fila. Eso es una transferencia incompleta, no un trabajo aceptado.
-- Una inserción repetida con el mismo resumen y el mismo destino no crea otra fila y no llama al spooler: devuelve la fase guardada.
-- Una inserción repetida con otro resumen u otro destino falla por la clave única y responde conflicto, sin fila nueva.
+- El protocolo completo, en este orden, es el de la sección «Protocolo de aceptación» de `05-datos-y-estados.md`: temporal, validación, publicación del archivo, commit SQLite y solo entonces despacho. Ningún `SubmitAsync` ocurre antes de que ese commit haya vuelto.
+- Si el proceso muere antes del commit, no hay fila. Al arrancar se borran temporales y archivos publicados que ninguna fila referencia. Eso no es un trabajo aceptado y no se despacha.
+- Dos peticiones concurrentes con la misma clave pueden escribir dos temporales. La clave única deja un solo commit. La perdedora no despacha: si el resumen y el destino coinciden, devuelve la fila ganadora; si no, responde conflicto. En ninguno de los dos casos hay un segundo spooler.
 - El cambio a `SubmittedToSpooler` es otro commit, después de que `Print` haya vuelto. Si el proceso muere antes de ese commit, la fila sigue en `Received` o `Prepared` y el arranque la pasa a `Uncertain` en una transacción, sin llamar a `SubmitAsync`.
 - El bloqueo del archivo de SQLite vale entre procesos del mismo equipo. El `Lock` de `FileJobRecordStore` no.
 
@@ -137,7 +137,7 @@ Eso no vuelve atómico el spooler de Windows. El hueco «el spooler ya aceptó y
 
 ### Recomendación
 
-SQLite desde el Incremento 1 para trabajos nuevos del agente, estados, identidades y claves. Los JSON de Desktop (`jobs\*.json`, `destinations.json`, `preferences.json`) siguen igual hasta el Incremento 4, que es cuando la ventana muestra el historial de red y migra lo histórico. El agente todavía no tiene JSON propio: `Worker` no escribe trabajos. Elegir SQLite ahora evita migrar después los primeros trabajos de red.
+SQLite desde el Incremento 1 para trabajos nuevos del agente, estados, identidades, destinos publicados y claves. Los JSON de Desktop (`jobs\*.json`, `destinations.json`, `preferences.json`) siguen siendo los de la ventana hasta el Incremento 4, que es cuando esa ventana muestra el historial de red y migra lo histórico. Ese paso no convierte `destinations.json` en la fuente de la LAN ni en un archivo escrito por los dos procesos. El agente todavía no tiene JSON propio: `Worker` no escribe trabajos. Elegir SQLite ahora evita migrar después los primeros trabajos de red.
 
 `FileJobRecordStore` no se reescribe en el Incremento 1. Sigue siendo el historial de la ventana.
 
@@ -184,11 +184,12 @@ Un trabajo que llega por la red no puede ser anónimo, y el equipo cliente tiene
 
 Desde el Incremento 1:
 
-- El anfitrión presenta un certificado. Quien conecta valida TLS. El pin es la huella aprendida en el emparejamiento. Cualquier otro certificado se rechaza, aunque sea autofirmado. No se desactiva la validación.
-- La primera confianza es un código temporal de un solo uso, generado en el momento, con caducidad corta, guardado solo como resumen. Se muestra en la salida del proceso del agente. Se consume al usarse. La ventana de emparejamiento espera al Incremento 4.
-- La credencial del dispositivo y la referencia a la clave del anfitrión viven en Credential Manager de esa cuenta, o en un blob DPAPI de `CurrentUser` si la prueba de concepto no puede usar Credential Manager. La fila SQLite guarda el nombre de la credencial y la huella, no el secreto.
-- Cada petición comprueba dispositivo no revocado y destino concedido. En el MVP el permiso es una cola virtual y un destino remoto.
-- Renovar el certificado del anfitrión exige un código nuevo, o una renovación autenticada mientras el certificado anterior sigue vigente. Un cambio de huella en silencio se rechaza.
+- El anfitrión presenta un certificado autofirmado. Quien conecta valida TLS. La huella o la clave pública que el cliente guarda la escribió quien opera, leída en el equipo anfitrión por un canal que no es el socket todavía no autenticado. Una huella recibida solo en esa conexión no se acepta como auténtica.
+- El código temporal de un solo uso nace ligado a esa huella. Caduca pronto, se guarda solo como resumen y se consume al usarse. Presentarlo con otra clave falla. La ventana de emparejamiento espera al Incremento 4; el vínculo no.
+- La comprobación del autofirmado exige a la vez vigencia, uso de clave de servidor, identidad esperada que también se mostró junto al código, y la huella ya verificada. El único error de cadena que puede acompañar a ese acierto es la raíz no confiable de ese certificado concreto. Cualquier otro error TLS rechaza. No hay una rama que devuelva verdadero para cualquier error.
+- La credencial del dispositivo y la referencia a la clave del anfitrión viven en Credential Manager de esa cuenta, o en un blob DPAPI de `CurrentUser` si la prueba no puede usar Credential Manager. La fila SQLite guarda el nombre de la credencial y la huella, no el secreto.
+- Cada petición comprueba dispositivo no revocado y un destino publicado y concedido. El cliente no envía un nombre de cola.
+- Renovar exige un código nuevo ligado a la huella nueva, otra vez por el canal independiente, o una sustitución dentro de una sesión que ya autenticó el certificado anterior todavía vigente. Un certificado caducado no autoriza su propio reemplazo. Un anuncio de huella nueva en una conexión no autenticada se ignora.
 
 ### Evidencia
 
@@ -234,9 +235,83 @@ No se añaden valores a `JobPhase`. La transferencia tiene sus propios estados (
 - `JobsPage` habilita la confirmación solo en esa fase y distingue la línea del spooler del papel.
 - `HomeBanner`: una cola instalada, y unas capacidades leídas, no confirman papel.
 
-## Decisiones que acompañan a las cinco
+## 6. Motor PDF compartido
+
+### Problema
+
+El agente tiene que despachar con el mismo PDFium, el mismo GDI y las mismas reglas que Desktop. Esos tipos están compilados dentro del proyecto WinUI. El agente solo referencia Core y su moniker es `net10.0`, sin Windows.
+
+### Alternativas
+
+- Hacer que el agente referencie el proyecto Desktop.
+- Copiar los tres archivos dentro del agente y mantenerlos a mano.
+- Extraer una biblioteca Windows sin WinUI y usarla desde los dos procesos.
+- Dejar el motor solo en Desktop y que el agente le pida a la ventana que imprima.
+
+### Ventajas
+
+- Una sola implementación. Las pruebas de despacho de Core y el límite nativo que ya corre sin abrir WinUI siguen hablando del mismo código.
+- El agente no arrastra la ventana, el tema ni `Microsoft.WindowsAppSDK`.
+
+### Desventajas
+
+- Hay que cambiar el moniker del agente a `net10.0-windows10.0.26100.0` para poder referenciar la biblioteca. Eso es el TFM de Windows, no WinUI.
+- `Windows.Data.Pdf` hoy solo se compila dentro de Desktop. El repositorio no demuestra que compile sin `UseWinUI`. La compilación del Incremento 1 es la que lo tiene que demostrar. Si no compila, no se añade WinUI al agente: se detiene y se anota el paquete mínimo del SDK de Windows que haría falta, sin el de la ventana.
+
+### Riesgos
+
+- Una copia divergente cambiaría el raster, el STA o el rechazo de lo que no es PDF.
+- Referenciar Desktop acoplaría el receptor a WinUI y a la ventana que el MVP quiere separada.
+
+### Recomendación
+
+En el Incremento 1 se crea una biblioteca de clase, ausente hoy, por ejemplo `src/Windows/PrintEngine`. Recibe sin cambio de lógica `PdfDocumentPreparer`, `PdfiumPrintSession`, `PdfSpoolerAdapter` y, porque el despacho no resuelve colas sin ella, `WindowsPrinterProbe` con el `StaQueue` que ya usa. La vista previa y el XAML se quedan en Desktop. Desktop y el agente referencian la biblioteca. El agente no referencia Desktop. Se conservan el modo EMF, `PrintDocument`, el hilo `NPB print STA`, las validaciones y `PrintDispatcher` en Core. Las versiones de `System.Drawing.Common` y de PDFium no se mueven. La comprobación de compilación, dependencias y ejecución en el proceso interactivo del agente está en `02-arquitectura-a2-b1.md`.
+
+### Evidencia
+
+- Rutas y csproj descritos en el diagnóstico.
+- `tests/WindowsPrintTests` ya compila `PdfiumPrintSession` sin lanzar WinUI, pero tomándolo del árbol de Desktop.
+- `PackageIdentityTests` exige que Core no use WinUI.
+
+## 7. Destinos publicados
+
+### Problema
+
+Desktop ya guarda destinos lógicos en `destinations.json`. Si el agente escribiera ese mismo archivo, la ventana y el receptor compartirían un JSON con candado de instancia. El cliente, además, no debe poder nombrar cualquier cola instalada en el anfitrión.
+
+### Alternativas
+
+- Compartir `destinations.json` entre Desktop y el agente.
+- Aceptar en la petición el nombre de cola que elija el cliente.
+- Registrar el destino en el agente, por configuración local de quien administra ese equipo, y guardarlo solo en SQLite.
+
+### Ventajas
+
+- La fuente de verdad de la LAN es una tabla con la misma transacción que la autorización.
+- El nombre de cola no viaja como dato de confianza del cliente. El agente lo resuelve desde su fila.
+
+### Desventajas
+
+- En el Incremento 1 hay dos catálogos: el JSON local de la ventana y la tabla del agente. No se sincronizan solos. Es el costo de no mezclarlos antes del Incremento 4, y ni siquiera entonces el JSON pasa a ser la fuente de la red.
+
+### Riesgos
+
+- Una escritura compartida reintroduce la carrera de `FileDestinationStore`, que también usa un `Lock` de instancia y un temporal.
+- Publicar una cola porque el cliente escribió su nombre saltaría el permiso.
+
+### Recomendación
+
+SQLite del agente es la única fuente de los destinos LAN. En el MVP, quien administra el equipo anfitrión registra un destino físico en una configuración local del agente, fuera de la carpeta Desktop. El agente vuelca ese registro a SQLite y, a partir de ahí, el receptor solo lee la tabla. No abre `destinations.json`. El cliente elige entre los destinos publicados y concedidos a su dispositivo, por identificador. Un nombre de cola arbitrario se rechaza antes del temporal. Sigue habiendo un solo destino publicado en el MVP.
+
+### Evidencia
+
+- `FileDestinationStore` escribe `%LOCALAPPDATA%\Neobash\PrintBridge\Desktop\destinations.json` cuando lo construye Desktop (`App.xaml.cs`).
+- `PrintDestination` guarda `QueueName` junto al identificador. El receptor nuevo no acepta ese nombre desde la red.
+- No hay tabla de destinos en el agente: el proyecto no tiene SQLite.
+
+## Decisiones que acompañan a las anteriores
 
 - El agente del MVP es un proceso propio en la sesión interactiva, separado de la ventana WinUI. Un servicio de Windows, o un servicio más un proceso de sesión, queda para una prueba posterior. No se escribe «imposible». La restricción STA de `System.Drawing.Printing` se comprueba antes de mover el adaptador a la sesión 0; no se usa como veto eterno.
 - Seguridad desde el Incremento 1. El Incremento 4 añade la UI de emparejamiento y no estrena los controles.
-- Una cola virtual, un destino remoto, sin alta dinámica. GELIA-NV fuera. Windows 10 fuera del requisito.
+- Una cola virtual vinculada a un destino publicado por el agente, sin alta dinámica. GELIA-NV fuera. Windows 10 fuera del requisito. El cliente no inventa el nombre de la cola.
 - El firewall se documenta y no se configura en este cambio ni como efecto colateral del Incremento 1.

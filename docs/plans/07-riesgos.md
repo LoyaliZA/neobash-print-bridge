@@ -36,6 +36,10 @@ Un ítem puede citar evidencia y, además, dejar una cola distinta en otra clase
 - Clave durable dispositivo + origen, conflicto si cambia el cuerpo o el destino, incompleto distinto de aceptado, `Uncertain` sin reimpresión automática. Clase: decisión recomendada.
 - Certificado fijado, código de un solo uso, Credential Manager o DPAPI de la cuenta, revocación y renovación sin camino anónimo. Clase: decisión recomendada. Ninguno de esos API está en `src`.
 - Agente del MVP como proceso de la sesión interactiva, aparte de WinUI. Clase: decisión recomendada.
+- Extraer el motor PDF a una biblioteca Windows compartida en el Incremento 1, sin `UseWinUI` en el agente. Clase: decisión recomendada. Hoy los tres adaptadores están en el csproj de Desktop y el agente solo referencia Core. Que `Windows.Data.Pdf` compile fuera de WinUI no está demostrado: lo tiene que demostrar la compilación, y un fallo no se tapa referenciando la ventana.
+- La huella inicial se verifica por un canal independiente y el código queda ligado a ella. Vigencia, uso e identidad se exigen. Los demás errores TLS se rechazan. Clase: decisión recomendada. El código actual no autentica, así que esto no es una observación.
+- Los destinos LAN viven solo en SQLite del agente, dados de alta por configuración local. `destinations.json` no se comparte. El cliente no envía nombres de cola. Clase: decisión recomendada.
+- El despacho espera al commit durable. Dos peticiones con la misma clave no producen dos despachos. Los huérfanos se borran al arrancar. Clase: decisión recomendada. `FileJobRecordStore` no cumple ese orden.
 - Una cola virtual vinculada a un destino remoto, sin alta dinámica. Clase: decisión recomendada. Encaja con el único `PrintSupportVirtualPrinter` del manifiesto.
 - Papel de hojas primero. Clase: decisión recomendada. A4 y carta son los tamaños que el ticket ya acepta.
 - Topes de 32 MiB, una transferencia en curso y 30 aceptaciones por 10 minutos. Clase: decisión recomendada. No salen de una medición del repositorio; sirven para probar el receptor.
@@ -49,7 +53,7 @@ Un ítem puede citar evidencia y, además, dejar una cola distinta en otra clase
 
 ## Bloqueos
 
-- Empezar el Incremento 1 sin los criterios de `06-implementacion.md`. Clase: bloqueante antes de implementar. En particular sin TLS validado, sin permiso por destino, sin SQLite y sin la regla de no reimprimir `Uncertain`.
+- Empezar el Incremento 1 sin los criterios de `06-implementacion.md`. Clase: bloqueante antes de implementar. En particular sin la biblioteca compartida, sin TLS que rechace los errores que no sean el caso autofirmado ya fijado, sin destinos publicados en SQLite, sin el commit anterior al despacho y sin la regla de no reimprimir `Uncertain`.
 - Empezar el Incremento 2 sin las dos pruebas de concepto de tubería y de paquete de documento. Clase: bloqueante antes de implementar.
 - Dar por impresa una hoja porque el spooler aceptó o porque la red respondió `Aceptada`. Clase: bloqueante antes de implementar cualquier texto o estado que lo afirme. El Incremento 5 mira el papel.
 - Afirmar que todos los controladores aceptan el PDF o el OXPS. Clase: bloqueante antes de implementar esa frase. `PdfSpoolerAdapter` solo sabe mirar `PaperSizes` e `IsValid` de la cola que tiene delante.

@@ -17,8 +17,8 @@ El agente no se expone a Internet. No se documenta un reenvío de puertos ni una
 ## Amenazas y controles
 
 - Trabajo anónimo. Control: sin credencial de dispositivo no se crea fila ni se llama al spooler. No hay un modo de invitado.
-- Credencial robada de otro destino. Control: la autenticación no basta. La fila de permisos liga dispositivo y destino. En el MVP ese permiso es uno. Otro destino se rechaza con la sesión TLS ya válida.
-- Suplantación del anfitrión. Control: validación TLS real y pin de la huella aprendida en el emparejamiento. Un certificado distinto se rechaza. Está prohibido un callback que devuelva verdadero para cualquier certificado, y está prohibido desactivar la comprobación del nombre o de la cadena para «hacer funcionar» un autofirmado sin pin.
+- Credencial robada de otro destino. Control: la autenticación no basta. La fila de permisos liga dispositivo y destino publicado. En el MVP ese permiso es uno. Otro destino se rechaza con la sesión TLS ya válida. Un nombre de cola de Windows en la petición se rechaza aunque la cola exista: el cliente solo elige un identificador publicado y concedido.
+- Suplantación del anfitrión. Control: la huella o la clave pública se verifica por un canal distinto del servidor todavía no autenticado. El código de un solo uso está ligado a esa huella. Un certificado distinto se rechaza. Está prohibido un callback que devuelva verdadero ante cualquier error TLS, y está prohibido guardar la huella que el propio socket anuncia antes de estar autenticado.
 - Token en el fuente o en `appsettings.json`. Control: prohibido. `appsettings.json` del agente hoy solo tiene niveles de registro; debe seguir sin secretos. Las pruebas no fijan una credencial de producción.
 - Repetición con otro cuerpo o otro destino. Control: la clave única dispositivo + origen responde conflicto y no abre un trabajo nuevo.
 - Respuesta perdida que el cliente interpreta como fallo y reintenta. Control: el reintento de la misma clave, el mismo resumen y el mismo destino devuelve la fase ya guardada y no llama al spooler. Si la fase es `Uncertain`, se devuelve `Uncertain`.
@@ -34,21 +34,41 @@ El agente no se expone a Internet. No se documenta un reenvío de puertos ni una
 
 ## Certificado del anfitrión
 
-El agente genera un certificado en el equipo anfitrión. La clave privada no sale de esa cuenta.
+El agente genera un certificado autofirmado en el equipo anfitrión. La clave privada no sale de esa cuenta. El repositorio no contiene todavía ese generador: el contrato de abajo es el que el Incremento 1 tiene que cumplir.
 
-Quien conecta, después del emparejamiento, solo acepta la huella guardada. La validación por defecto de la plataforma sigue activa para caducidad y para el uso de la clave. Si el certificado es autofirmado, el pin sustituye a una CA que este proyecto no tiene: eso es una comprobación explícita de una sola clave pública, no un `return true`.
+El cliente no acepta como auténtica una huella, ni una clave pública, que haya llegado solo desde un servidor que aún no está autenticado. Eso incluye el certificado presentado en el primer handshake y cualquier mensaje previo del receptor. La huella que vale es la que quien opera lee en el equipo anfitrión y escribe en el cliente por ese otro canal.
+
+Sobre el certificado presentado, todas estas comprobaciones tienen que cumplirse. Fallar una rechaza la conexión:
+
+- Vigencia. `NotBefore` ya pasó y `NotAfter` no ha pasado, en UTC. No hay margen que acepte un certificado caducado o todavía no válido.
+- Uso. El uso de clave permite firma digital y cifrado de clave, y el uso extendido incluye autenticación de servidor (`1.3.6.1.5.5.7.3.1`). Si el uso extendido falta, o trae otro uso, se rechaza. No se interpreta la ausencia como «sirve para todo».
+- Identidad esperada. El nombre que quien opera vio junto a la huella, en el mismo canal independiente, coincide con el nombre del sujeto o con un nombre alternativo del certificado, y con el nombre al que el cliente abre la conexión. Una huella correcta con otro nombre se rechaza. Un nombre correcto con otra huella se rechaza.
+- Huella ya verificada. La huella SHA-256 de la clave pública, o del certificado completo si fue eso lo que se mostró en el anfitrión, es igual a la que quedó escrita en el cliente antes de confiar en el socket. El código de un solo uso solo se acepta si el agente lo guardó ligado a esa misma huella.
+
+El certificado es autofirmado porque este repositorio no tiene una CA de la LAN. El error de cadena «raíz no confiable» de ese certificado concreto puede acompañar a un acierto solo cuando vigencia, uso, identidad y huella ya coincidieron. Cualquier otro error TLS —nombre distinto, caducado, uso incorrecto, revocación, error de protocolo, cadena distinta— hace que la validación devuelva falso. No existe una rama que ignore el conjunto de errores y devuelva verdadero. No se desactiva la validación de la plataforma para «dejar pasar» el autofirmado.
 
 El certificado no se copia al repositorio ni a `local-certs` de la POC de firma del MSIX. Ese certificado (`docs/installation.md`, `CN=Neobash Print Bridge POC`) firma el paquete. No autentica la LAN. Son materiales distintos.
 
 ## Emparejamiento
 
-1. El agente, en la sesión interactiva, genera un código de un solo uso, con caducidad corta, y muestra el código en su salida local. No lo escribe en el registro de trabajos.
-2. Quien opera el equipo cliente lo introduce una vez.
-3. El agente entrega la huella del certificado del anfitrión y crea la credencial del dispositivo y el permiso del destino.
-4. El código queda gastado. Un segundo uso falla. Un código caducado falla.
-5. A partir de ahí cada envío usa TLS y esa credencial.
+1. El agente, en la sesión interactiva, genera el certificado y un código de un solo uso ligado a su huella. Muestra en su salida local, en el mismo equipo, el código, la huella y el nombre esperado. No envía esa huella como dato de confianza. No la escribe en el registro de trabajos.
+2. Quien opera lee esos tres datos en el anfitrión y los escribe en el cliente. Ese es el canal independiente: la pantalla o la salida del proceso en el equipo anfitrión, no la conexión que se está autenticando.
+3. El cliente abre TLS usando el nombre que acaba de registrar. Aplica las comprobaciones de la sección anterior. El agente solo entonces consume el código, si la huella presentada es la ligada al código, y crea la credencial del dispositivo y el permiso sobre el destino publicado.
+4. El código queda gastado. Un segundo uso falla. Un código caducado falla. Un código presentado con otra clave falla.
+5. A partir de ahí cada envío usa TLS y esa credencial, y vuelve a exigir vigencia, uso, identidad y la misma huella.
 
-La ventana que hará estos pasos visibles es del Incremento 4. Un banco de pruebas del Incremento 1 puede introducir el código sin esa ventana. No puede saltarse el código, el pin ni el permiso.
+La ventana que hará estos pasos visibles es del Incremento 4. Un banco de pruebas del Incremento 1 puede introducir el código y la huella sin esa ventana. No puede tomar la huella del servidor, ni saltarse el código, ni saltarse el permiso.
+
+## Renovación del certificado
+
+El certificado del anfitrión tiene caducidad. Sustituirlo exige uno de estos caminos:
+
+- un código nuevo, ligado a la huella nueva, mostrado otra vez solo en el anfitrión y escrito otra vez en el cliente por el canal independiente;
+- o una renovación dentro de una sesión que ya autenticó el certificado anterior, todavía vigente. La huella nueva se muestra en el anfitrión y quien opera la confirma antes de que el cliente reemplace la guardada. La sesión vieja no sirve si el certificado ya caducó.
+
+Un certificado caducado no autoriza su reemplazo. Un cambio de huella anunciado por una conexión que no pasó las comprobaciones se ignora. El cliente no actualiza la huella porque el handshake falló o porque el servidor envió otra.
+
+La credencial de dispositivo se rota con el mismo criterio: la anterior deja de valer cuando la nueva queda confirmada. No conviven dos credenciales válidas para el mismo dispositivo.
 
 ## Dónde viven las credenciales
 
@@ -60,22 +80,17 @@ Ni el código ni el JSON de un trabajo contienen el secreto. Desktop no recibe u
 
 El repositorio no llama hoy a Credential Manager ni a DPAPI. Elegir uno es parte del Incremento 1, no una observación.
 
+## Dónde se publica un destino
+
+La fuente de verdad de los destinos LAN es únicamente SQLite del agente. Quien administra el equipo anfitrión registra el destino físico en una configuración local de ese proceso, fuera de `%LOCALAPPDATA%\Neobash\PrintBridge\Desktop`. El agente copia ese registro a la tabla y el receptor no vuelve a leer el archivo de registro: consulta la tabla. No abre `destinations.json` y no lo comparte con la ventana.
+
+El cliente recibe identificadores y nombres visibles de destinos publicados y concedidos. Al enviar, manda el identificador. Si la petición trae un nombre de cola, o un identificador que no está publicado para ese dispositivo, se rechaza antes de crear el temporal.
+
 ## Revocación
 
 Quien opera el anfitrión revoca un dispositivo borrando o marcando su fila y eliminando la credencial. La petición siguiente falla la autorización aunque el certificado del anfitrión siga vigente. No hay periodo de gracia anónimo. No hay lista de revocación pública: la tabla del agente es la autoridad, porque el emparejamiento también fue local.
 
 Revocar no borra el historial de trabajos ya aceptados. Esos siguen en su fase, incluido `Uncertain`, para no ocultar un posible envío al spooler.
-
-## Renovación
-
-El certificado del anfitrión tiene caducidad. Renovarlo exige uno de estos caminos:
-
-- un código nuevo de un solo uso, que fija la huella nueva;
-- o una renovación ya autenticada, con el certificado viejo todavía vigente, que reemplaza la huella en el cliente.
-
-Un cambio de certificado que no pase por uno de esos caminos se rechaza. El cliente no «actualiza el pin» porque la conexión falló.
-
-La credencial de dispositivo se rota con el mismo criterio: la anterior deja de valer cuando la nueva queda confirmada. No conviven dos credenciales válidas para el mismo dispositivo.
 
 ## Tamaño y frecuencia
 

@@ -18,7 +18,7 @@ Ese valor vive en `metadata.json` (`estado`) dentro del `LocalFolder` del paquet
 
 Estados de contrato, todavía no implementados:
 
-- `EnCurso`. Llegaron bytes o se abrió un temporal. No hay clave confirmada. No es un trabajo.
+- `EnCurso`. Llegaron bytes o se abrió un temporal. No hay clave confirmada. No es un trabajo. Dos peticiones a la vez pueden estar en `EnCurso` con la misma clave; eso no autoriza dos despachos.
 - `Aceptada`. El cuerpo está entero en disco y la transacción de la clave y de la fila hizo commit.
 - `Rechazada`. Falló la autenticación, el destino, el tipo, el tamaño o la frecuencia. Sin fila de trabajo.
 - `Conflicto`. La clave ya existe con otro resumen de contenido o con otro destino. La fila vieja no se toca. No nace otra.
@@ -69,6 +69,38 @@ Junto a la clave se guardan el resumen SHA-256 del cuerpo ya escrito y el destin
 
 El identificador de origen pasa por `JobIdRules` antes de acercarse al sistema de archivos. El identificador interno del trabajo lo genera el agente. No es la clave de idempotencia y no lo elige el cliente como ruta.
 
+El destino de la clave es el identificador publicado en SQLite, no un nombre de cola recibido en la petición.
+
+## Protocolo de aceptación
+
+Este orden es obligatorio. El repositorio no lo implementa: `FileJobRecordStore` escribe el JSON antes de preparar y no tiene este commit. El Incremento 1 lo cumple en el almacén del agente.
+
+1. Autenticar y comprobar que el identificador de destino está publicado y concedido a ese dispositivo. Si falla, no se crea temporal, ni fila, ni despacho. Un nombre de cola en la petición corta aquí.
+2. Escribir el cuerpo en un archivo temporal, fuera del directorio de trabajos confirmados, con un nombre que ninguna fila pueda citar. Se calcula el SHA-256 mientras se escribe. Si el flujo se corta, el tipo no es `application/pdf` o se pasa de 32 MiB, se borra el temporal. Sigue sin fila y sin despacho.
+3. Validar el temporal ya cerrado: tamaño, resumen, tipo, identificador de origen según `JobIdRules`, y que el destino siga publicado. Si falla, se borra el temporal.
+4. Publicar el archivo: volcar el temporal a disco y renombrarlo a la ruta definitiva que asigna el agente, dentro de su raíz. Si el proceso muere antes del renombre, al arrancar solo existe el temporal y se borra. El archivo ya renombrado todavía no es un trabajo.
+5. Commit SQLite, en una transacción inmediata: insertar la clave (`device_id`, `source_id`, resumen, destino, `job_id`) y la fila del trabajo en `Received`, apuntando a esa ruta. Cuando el commit vuelve, la transferencia pasa a `Aceptada`. Si el commit no vuelve, no hay despacho. Si la clave choca, se aplica la regla de concurrencia de abajo y no se inserta otra fila.
+6. Despachar solo después de ese commit. `PrintDispatcher`, el preparador y `SubmitAsync` no se llaman antes. El paso a `Prepared` y el paso a `SubmittedToSpooler` son commits posteriores.
+
+El límite de una transferencia en curso por dispositivo no sustituye este commit. Si dos peticiones entran de todas formas, el paso 5 deja un solo ganador.
+
+### Dos peticiones con la misma clave
+
+Cada una puede tener su temporal y, si ambas llegan al paso 4, su propio archivo publicado. Las dos intentan el insert. La restricción única admite un commit.
+
+- La ganadora, y solo ella, puede pasar al paso 6.
+- La perdedora no despacha. Si el resumen y el destino son los de la fila ya confirmada, borra su archivo de más y devuelve la fase guardada. Si difieren, responde `Conflicto`, borra su archivo si ninguna fila lo cita, y no crea trabajo.
+
+### Recuperación e huérfanos
+
+Al abrir la base, antes de aceptar nada nuevo y sin llamar al spooler:
+
+- Temporales no renombrados: se borran. No hubo commit.
+- Archivos publicados que ninguna fila de `jobs` cita: huérfanos. Se borran. No se despachan. Un corte entre el paso 4 y el paso 5 deja exactamente este caso.
+- Filas `Received` o `Prepared`: pasan a `Uncertain`. No se despachan, aunque el archivo siga ahí. El commit ya ocurrió y el spooler puede no haber empezado, o haber empezado sin dejar `SubmittedToSpooler`. La regla de no reimprimir no cambia.
+- Fila cuya ruta no está en disco y cuya fase sigue en `Received`: tampoco se despacha. Pasa a `Uncertain` con el mismo detalle de interrupción. No se fabrica otro PDF.
+- `SubmittedToSpooler` y `Failed` se dejan como están.
+
 ## Recuperación ante pérdida y caídas
 
 Respuesta perdida. El cliente no sabe si el anfitrión aceptó. Reintenta la misma clave y el mismo cuerpo. Si el commit había ocurrido, recibe la fase guardada. Si no había commit, el reintento es la primera aceptación. En ninguno de los dos casos hay dos llamadas al spooler para esa clave.
@@ -90,11 +122,12 @@ Caída después del commit de `SubmittedToSpooler`. La recuperación no modifica
 
 No está implementado. Es el contrato del Incremento 1. Los nombres pueden ajustarse en el código; las unicidades y el momento del commit no.
 
-- `devices`. `device_id` único, nombre visible, referencia a la credencial (no el secreto), huella del certificado del anfitrión que ese dispositivo fijó, alta, revocación nula o con fecha.
-- `destination_grants`. Par único `device_id` + `destination_id`. En el MVP hay como máximo un destino concedido por dispositivo, y el producto de prueba usa un solo vínculo cola virtual → destino remoto.
+- `devices`. `device_id` único, nombre visible, referencia a la credencial (no el secreto), huella que quien opera registró por el canal independiente, nombre esperado del anfitrión, alta, revocación nula o con fecha.
+- `published_destinations`. Fuente de verdad de la LAN. `destination_id` único, nombre visible, `queue_name` y papel copiados desde la configuración administrativa local del agente. El receptor no acepta `queue_name` desde el cliente. En el MVP hay un destino.
+- `destination_grants`. Par único `device_id` + `destination_id`. El destino tiene que existir en `published_destinations`. En el MVP hay un permiso, el de la única cola virtual hacia ese destino.
 - `idempotency`. Clave primaria `device_id` + `source_id`. Columnas `content_sha256`, `destination_id`, `job_id` único.
-- `jobs`. `job_id` primario, `media_type`, ruta local asignada por el agente, `destination_id`, nombre de cola, `phase` con los cinco valores actuales, detalle, confirmación física nula, `received_at`.
-- `pairing_codes`. Solo el resumen del código, caducidad y momento de uso. Sin el código en claro. Una fila usada no vuelve a servir.
+- `jobs`. `job_id` primario, `media_type`, ruta local asignada por el agente, `destination_id`, nombre de cola copiado de `published_destinations` y no de la petición, `phase` con los cinco valores actuales, detalle, confirmación física nula, `received_at`.
+- `pairing_codes`. Solo el resumen del código, la huella a la que está ligado, el nombre esperado, caducidad y momento de uso. Sin el código en claro. Una fila usada no vuelve a servir. Un código no vale para otra huella.
 
 No hay tabla que mezcle `EnCurso` con `JobPhase`. `EnCurso` no se inserta. `Rechazada` y `Conflicto` pueden anotarse en la auditoría sin fila en `jobs`.
 
@@ -111,6 +144,8 @@ Bajo `%LOCALAPPDATA%\Neobash\PrintBridge\Desktop`, escritos por la ventana no em
 - `preferences.json`. Destino activo y apariencia.
 
 Siguen con su `Lock` de instancia y su temporal + `Move`. El Incremento 1 no los migra, no los borra y no los usa como cola de idempotencia de la red.
+
+`destinations.json` tampoco es la fuente de los destinos LAN. El agente no lo abre. La configuración administrativa local que alimenta `published_destinations` vive en el directorio del agente, fuera de `Desktop`, y solo sirve para ese alta. Después del volcado, la petición lee SQLite. El Incremento 4 puede migrar el historial visible de la ventana; no convierte ese JSON en una escritura compartida con el agente.
 
 Bajo el `LocalFolder` del paquete:
 

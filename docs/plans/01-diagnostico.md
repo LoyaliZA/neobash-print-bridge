@@ -48,6 +48,22 @@ Esas piezas se conservan. El Incremento 1 no las reemplaza para «aprovechar» l
 
 No hay `UseWindowsService`, ni otro host, ni un proceso de sesión distinto del genérico de `Microsoft.Extensions.Hosting`.
 
+### El motor PDF no está en el agente
+
+Los adaptadores que imprimen viven en el proyecto de la ventana:
+
+- `src/Windows/Desktop/Printing/PdfSpoolerAdapter.cs`
+- `src/Windows/Desktop/Printing/PdfiumPrintSession.cs`
+- `src/Windows/Desktop/Printing/PdfDocumentPreparer.cs`
+
+`PdfDocumentPreparer` usa `Windows.Data.Pdf` y `Windows.Storage.Streams`. `PdfSpoolerAdapter` y `PdfiumPrintSession` usan `System.Drawing.Printing` y PDFium. El csproj de Desktop activa `UseWinUI`, referencia `Microsoft.WindowsAppSDK` y fija `System.Drawing.Common` 10.0.0 y `bblanchon.PDFium.Win32` 157.0.8100. También copia las licencias de `docs/third-party/pdfium` al resultado de la compilación. El destino es `net10.0-windows10.0.26100.0`.
+
+El csproj del agente es `net10.0`, sin sufijo de Windows. Su única referencia de proyecto es Core. No referencia Desktop, no pone `UseWinUI` y no arrastra PDFium ni `System.Drawing`. Con ese grafo, el proceso del agente no puede construir esos tres tipos.
+
+`PrintDispatcher`, `PageLayoutCalculator` y las reglas de opciones ya están en Core, que sigue en `net10.0` y no referencia WinUI (`PackageIdentityTests`). El catálogo en memoria (`CachingPrinterCatalog`) también está en Core. La sonda que lee colas reales, `WindowsPrinterProbe`, está en Desktop y usa `StaQueue` más `System.Drawing.Printing`.
+
+`tests/WindowsPrintTests/Neobash.PrintBridge.WindowsPrintTests.csproj` compila `PdfiumPrintSession.cs` tomado de Desktop, con el comentario de que ejercita el límite nativo sin abrir WinUI ni un spooler. No compila `PdfDocumentPreparer` ni `PdfSpoolerAdapter`. No existe un proyecto de biblioteca, distinto de la ventana, que contenga esos adaptadores. El repositorio tampoco muestra una ejecución de ese motor dentro del proceso del agente.
+
 ### Conexiones y Accesos no operan
 
 `ConnectionsPage.Activate` y `AccessPage.Activate` están vacíos. El XAML de Conexiones muestra textos fijos: el equipo local «está presente»; red local, integraciones, GELIA-NV y conexión remota dicen «No disponible». Accesos dice que no concede permisos, no invita y no simula una sesión, y muestra «Ningún equipo vinculado.» No hay botones de emparejamiento ni de red.
