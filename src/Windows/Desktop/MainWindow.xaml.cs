@@ -111,6 +111,7 @@ public sealed partial class MainWindow : Window
             _pages[tag] = page;
         }
 
+        if (ContentFrame.Content is ManualPrintPage previous && previous != page) previous.Deactivate();
         ContentFrame.Content = page;
         if (page is ISessionPage sessionPage)
         {
