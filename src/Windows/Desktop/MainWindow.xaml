@@ -2,7 +2,7 @@
     x:Class="Neobash.PrintBridge.Desktop.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Neobash Print Bridge — A1.3">
+    Title="Neobash Print Bridge — A1.4">
     <ScrollViewer>
         <StackPanel Padding="24" Spacing="16" MaxWidth="880">
             <TextBlock
@@ -11,12 +11,12 @@
 
             <StackPanel Spacing="8">
                 <TextBlock Text="Cola" />
-                <ComboBox x:Name="QueueBox" HorizontalAlignment="Stretch" PlaceholderText="Elige una cola física" />
+                <ComboBox x:Name="QueueBox" HorizontalAlignment="Stretch" PlaceholderText="Elige una cola física" IsEnabled="False" />
                 <TextBlock Text="Papel anunciado por esa cola" />
-                <ComboBox x:Name="PaperBox" HorizontalAlignment="Stretch" PlaceholderText="Elige un papel anunciado" />
+                <ComboBox x:Name="PaperBox" HorizontalAlignment="Stretch" PlaceholderText="Elige un papel anunciado" IsEnabled="False" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="RefreshButton" Content="Actualizar colas" Click="OnRefresh" />
-                    <Button x:Name="SaveButton" Content="Guardar destino" Click="OnSave" />
+                    <Button x:Name="SaveButton" Content="Guardar destino" Click="OnSave" IsEnabled="False" />
                 </StackPanel>
                 <TextBlock x:Name="DestinationStatus" TextWrapping="Wrap" />
             </StackPanel>
@@ -50,7 +50,7 @@
                 </ComboBox>
                 <TextBlock Text="Porcentaje del tamaño físico del PDF" />
                 <TextBox x:Name="PercentBox" PlaceholderText="Por ejemplo, 90" IsEnabled="False" />
-                <Button x:Name="PrintButton" Content="Imprimir" Click="OnPrint" />
+                <Button x:Name="PrintButton" Content="Imprimir" Click="OnPrint" IsEnabled="False" />
                 <TextBlock x:Name="PrintStatus" TextWrapping="Wrap" />
             </StackPanel>
 

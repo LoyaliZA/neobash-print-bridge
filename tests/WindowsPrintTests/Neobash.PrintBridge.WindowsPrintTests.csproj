@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\src\Core\Neobash.PrintBridge.Core.csproj" />
     <!-- Exercise the production native boundary without launching WinUI or a spooler. -->
     <Compile Include="..\..\src\Windows\Desktop\Printing\PdfiumPrintSession.cs" Link="PdfiumPrintSession.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\Printing\StaQueue.cs" Link="StaQueue.cs" />
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>

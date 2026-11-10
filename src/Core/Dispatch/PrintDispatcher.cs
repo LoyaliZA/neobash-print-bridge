@@ -24,7 +24,10 @@ public sealed class PrintDispatcher
         _spooler = spooler;
     }
 
-    public async Task<DispatchResult> DispatchAsync(PrintJob job, CancellationToken cancellationToken = default)
+    public Task<DispatchResult> DispatchAsync(PrintJob job, CancellationToken cancellationToken = default) =>
+        Task.Run(() => ExecuteAsync(job, cancellationToken));
+
+    private async Task<DispatchResult> ExecuteAsync(PrintJob job, CancellationToken cancellationToken)
     {
         var destination = _destinations.Find(job.DestinationId);
         if (destination is null)
@@ -84,7 +87,18 @@ public sealed class PrintDispatcher
 
         try
         {
-            _spooler.Submit(document, queue.QueueName, effective.PaperName, cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException exception)
+            {
+                const string cancelled = "La espera se canceló antes de entregar el trabajo al spooler.";
+                _jobs.Update(effective.Id, JobPhase.Failed, cancelled);
+                return new DispatchResult(JobPhase.Failed, string.IsNullOrWhiteSpace(exception.Message) ? cancelled : cancelled + " " + exception.Message);
+            }
+
+            await _spooler.SubmitAsync(document, queue.QueueName, effective.PaperName, cancellationToken).ConfigureAwait(false);
         }
         catch (SpoolerPortException exception) when (!exception.Started)
         {

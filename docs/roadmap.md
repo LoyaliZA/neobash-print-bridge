@@ -23,6 +23,8 @@ NPB Desktop guarda un destino y sus opciones predeterminadas, e imprime un PDF e
 
 `application/oxps` se rechaza antes del spooler. Ese rechazo no es el conector de las capturas.
 
+A1.4 deja la ventana activa antes de enumerar colas o trabajos, separa los nombres de las capacidades del controlador y saca el historial y el envío del hilo de la interfaz. No rediseña la pantalla ni cierra la prueba de papel. El diagnóstico y la forma de leer los tiempos están en [A1.4-rendimiento.md](A1.4-rendimiento.md).
+
 ## Pendiente
 
 - **A2.** Leer una captura OXPS ya existente y enviarla con un adaptador distinto. No usa `IJobFileStore.Open`, que solo crea carpetas nuevas.

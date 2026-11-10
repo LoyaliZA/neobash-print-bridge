@@ -8,7 +8,7 @@ public sealed class DesktopHost
     public DesktopHost(
         IDestinationStore destinations,
         IJobRecordStore jobs,
-        WindowsPrinterCatalog catalog,
+        CachingPrinterCatalog catalog,
         PrintDispatcher dispatcher,
         IDiagnosticLog log)
     {
@@ -23,7 +23,7 @@ public sealed class DesktopHost
 
     public IJobRecordStore Jobs { get; }
 
-    public WindowsPrinterCatalog Catalog { get; }
+    public CachingPrinterCatalog Catalog { get; }
 
     public PrintDispatcher Dispatcher { get; }
 

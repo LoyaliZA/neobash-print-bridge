@@ -172,6 +172,8 @@ public sealed class PrintOptionTests
         public JobRecord? Find(string id) => _items.TryGetValue(id, out var record) ? record : null;
 
         public IReadOnlyList<JobRecord> List() => _items.Values.ToList();
+
+        public IReadOnlyList<string> ListIds() => _items.Keys.ToList();
     }
 
     private sealed class RecordingPreparer : IDocumentPreparer
@@ -184,7 +186,10 @@ public sealed class PrintOptionTests
     {
         public List<(string QueueName, string? PaperName)> Submissions { get; } = [];
 
-        public void Submit(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken) =>
+        public Task SubmitAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
+        {
             Submissions.Add((queueName, paperName));
+            return Task.CompletedTask;
+        }
     }
 }

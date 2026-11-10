@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Neobash.PrintBridge.Core.Dispatch;
@@ -16,14 +18,71 @@ public sealed partial class MainWindow : Window
     private bool _loading;
     private bool _printing;
     private bool _refreshingHistory;
+    private bool _snapshotReady;
+    private int _historyToken;
+    private bool _namesReady;
+    private bool _activatedLogged;
+    private int _namesToken;
+    private int _detailToken;
 
     public MainWindow(DesktopHost host)
     {
         _host = host;
         InitializeComponent();
         Closed += OnClosed;
+        Activated += OnActivated;
         QueueBox.SelectionChanged += OnQueueChanged;
-        LoadQueues();
+        PaperBox.SelectionChanged += OnPaperChanged;
+        DestinationStatus.Text = "Cargando colas…";
+        UpdateCommandStates();
+    }
+
+    public void BeginStartup()
+    {
+        _ = RecoverAsync();
+        _ = LoadNamesAsync();
+        RefreshHistory();
+    }
+
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (_activatedLogged)
+        {
+            return;
+        }
+
+        _activatedLogged = true;
+        _host.Log.Timing("window-activated-event", StartupClock.SinceManaged(), ("baseline", "managed-entry"));
+    }
+
+    private async Task RecoverAsync()
+    {
+        var started = Stopwatch.GetTimestamp();
+        IReadOnlyList<string> ids = [];
+        try
+        {
+            ids = await Task.Run(() => _host.Jobs.ListIds());
+            _snapshotReady = true;
+            UpdateCommandStates();
+            await Task.Run(() => JobRecovery.MarkInterruptedAsUncertain(_host.Jobs, ids));
+            _host.Log.Timing(
+                "job-recovery",
+                Stopwatch.GetElapsedTime(started),
+                ("baseline", "snapshot"),
+                ("count", ids.Count.ToString()),
+                ("result", "ready"));
+        }
+        catch (Exception exception)
+        {
+            _snapshotReady = true;
+            UpdateCommandStates();
+            _host.Log.Write("No se pudo recuperar trabajos interrumpidos. " + exception.Message);
+        }
+        finally
+        {
+            // A pre-recovery snapshot must not be the final visible history.
+            RefreshHistory();
+        }
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -32,16 +91,77 @@ public sealed partial class MainWindow : Window
         Application.Current.Exit();
     }
 
-    private void OnRefresh(object sender, RoutedEventArgs e) => LoadQueues();
+    private void OnRefresh(object sender, RoutedEventArgs e) => _ = LoadNamesAsync();
 
-    private void LoadQueues()
+    private async Task LoadNamesAsync()
     {
+        var token = ++_namesToken;
+        ++_detailToken;
+        _namesReady = false;
+        UpdateCommandStates();
+        DestinationStatus.Text = "Cargando colas…";
+        var started = Stopwatch.GetTimestamp();
+        var timer = StartWait(() =>
+        {
+            if (token != _namesToken)
+            {
+                return;
+            }
+
+            DestinationStatus.Text = CatalogWaitText.NamesWaiting;
+            _host.Log.Timing(
+                "queue-name-enumeration",
+                Stopwatch.GetElapsedTime(started),
+                ("baseline", "ui-wait"),
+                ("result", "waiting"));
+        });
+        try
+        {
+            await _host.Catalog.RefreshNamesAsync();
+            timer.Stop();
+            if (token != _namesToken)
+            {
+                return;
+            }
+
+            ApplyNames();
+        }
+        catch (Exception exception)
+        {
+            timer.Stop();
+            if (token != _namesToken)
+            {
+                return;
+            }
+
+            DestinationStatus.Text = "No se pudo leer el catálogo de colas. " + exception.Message;
+            _host.Log.Write("Catálogo no leído. " + exception.Message);
+            UpdateCommandStates();
+        }
+    }
+
+    private void ApplyNames()
+    {
+        if (_host.Catalog.RefreshError is not null)
+        {
+            _namesReady = false;
+            DestinationStatus.Text = "No se pudo leer el catálogo de colas. " + _host.Catalog.RefreshError;
+            _host.Log.Timing(
+                "catalog-names-applied",
+                StartupClock.SinceManaged(),
+                ("baseline", "managed-entry"),
+                ("result", "unreadable"),
+                ("count", "0"));
+            UpdateCommandStates();
+            return;
+        }
+
         _loading = true;
         try
         {
             var installed = _host.Catalog.List();
             _queues.Clear();
-            _queues.AddRange(installed.Where(queue => !PhysicalQueueRules.IsVirtual(queue)));
+            _queues.AddRange(SavedQueueSelection.PhysicalCandidates(installed));
             QueueBox.Items.Clear();
             PaperBox.Items.Clear();
             foreach (var queue in _queues)
@@ -50,49 +170,49 @@ public sealed partial class MainWindow : Window
             }
 
             var saved = CurrentDestination();
-            if (saved is null)
+            var choice = SavedQueueSelection.Match(saved?.QueueName, installed, saved?.PaperName);
+            if (choice.Queue is null)
             {
-                DestinationStatus.Text = _queues.Count == 0
-                    ? "No hay colas físicas en el catálogo."
-                    : "Elige una cola y un papel, y guarda el destino.";
+                DestinationStatus.Text = AppendWarnings(choice.Message);
             }
             else
             {
-                var match = installed.FirstOrDefault(queue => string.Equals(queue.QueueName, saved.QueueName, StringComparison.OrdinalIgnoreCase));
-                if (match is null)
+                QueueBox.SelectedItem = choice.Queue.QueueName;
+                if (choice.Queue.Detail == QueueDetail.Ready)
                 {
-                    DestinationStatus.Text = $"La cola guardada «{saved.QueueName}» no está en el catálogo. No se selecciona otra.";
+                    FillPapers(choice.Queue);
+                    if (choice.ApplySavedPaper)
+                    {
+                        SelectPaper(saved?.PaperName);
+                        ApplyOptions(saved?.Defaults ?? PrintOptions.ForPaper(saved?.PaperName ?? ""));
+                    }
+
+                    DestinationStatus.Text = AppendWarnings(saved is null ? choice.Message : Describe(saved));
                 }
-                else if (PhysicalQueueRules.IsVirtual(match))
+                else if (choice.Queue.Detail == QueueDetail.Unreadable)
                 {
-                    DestinationStatus.Text = $"La cola guardada «{saved.QueueName}» es virtual y no puede ser destino físico. No se selecciona otra.";
+                    DestinationStatus.Text = AppendWarnings($"No se pudo leer la cola «{choice.Queue.QueueName}». No se selecciona otra.");
                 }
                 else
                 {
-                    QueueBox.SelectedItem = match.QueueName;
-                    FillPapers(SelectedQueue());
-                    SelectPaper(saved.PaperName);
-                    ApplyOptions(saved.Defaults ?? PrintOptions.ForPaper(saved.PaperName ?? ""));
-                    DestinationStatus.Text = Describe(saved);
+                    DestinationStatus.Text = "Leyendo los papeles que anuncia esta cola…";
+                    _ = LoadDetailsAsync(choice.Queue.QueueName);
                 }
             }
 
-            if (_host.Catalog.Warnings.Count > 0)
-            {
-                DestinationStatus.Text += " " + string.Join(" ", _host.Catalog.Warnings);
-            }
-        }
-        catch (Exception exception)
-        {
-            DestinationStatus.Text = "No se pudo leer el catálogo de colas. " + exception.Message;
-            _host.Log.Write("Catálogo no leído. " + exception.Message);
+            _namesReady = true;
+            _host.Log.Timing(
+                "catalog-names-applied",
+                StartupClock.SinceManaged(),
+                ("baseline", "managed-entry"),
+                ("result", "ready"),
+                ("count", _queues.Count.ToString()));
         }
         finally
         {
             _loading = false;
+            UpdateCommandStates();
         }
-
-        RefreshHistory();
     }
 
     private void OnQueueChanged(object sender, SelectionChangedEventArgs e)
@@ -102,7 +222,180 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        FillPapers(SelectedQueue());
+        ++_detailToken;
+        var queue = SelectedQueue();
+        if (queue is null)
+        {
+            PaperBox.Items.Clear();
+            UpdateCommandStates();
+            return;
+        }
+
+        if (queue.Detail == QueueDetail.Ready)
+        {
+            FillPapers(queue);
+            DestinationStatus.Text = AppendWarnings($"Cola «{queue.QueueName}». Elige un papel anunciado por esa cola.");
+            UpdateCommandStates();
+            return;
+        }
+
+        _ = LoadDetailsAsync(queue.QueueName);
+    }
+
+    private void OnPaperChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateCommandStates();
+        }
+    }
+
+    private async Task LoadDetailsAsync(string queueName)
+    {
+        var token = ++_detailToken;
+        PaperBox.IsEnabled = false;
+        SaveButton.IsEnabled = false;
+        PrintButton.IsEnabled = false;
+        DestinationStatus.Text = "Leyendo los papeles que anuncia esta cola…";
+        var started = Stopwatch.GetTimestamp();
+        var timer = StartWait(() =>
+        {
+            if (!IsCurrentDetail(token, queueName))
+            {
+                return;
+            }
+
+            DestinationStatus.Text = CatalogWaitText.CapabilitiesWaiting(queueName);
+            _host.Log.Timing(
+                "queue-capabilities",
+                Stopwatch.GetElapsedTime(started),
+                ("baseline", "ui-wait"),
+                ("queue", queueName),
+                ("result", "waiting"));
+        });
+        try
+        {
+            var read = await _host.Catalog.ReadDetailsAsync(queueName);
+            timer.Stop();
+            if (!IsCurrentDetail(token, queueName))
+            {
+                return;
+            }
+
+            var updated = _host.Catalog.List().FirstOrDefault(queue => string.Equals(queue.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
+            var index = _queues.FindIndex(queue => string.Equals(queue.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
+            if (updated is not null && index >= 0)
+            {
+                _queues[index] = updated;
+            }
+
+            if (read is null || updated is not { Detail: QueueDetail.Ready })
+            {
+                PaperBox.Items.Clear();
+                DestinationStatus.Text = AppendWarnings($"No se pudo leer la cola «{queueName}». No se selecciona otra.");
+                UpdateCommandStates();
+                return;
+            }
+
+            _loading = true;
+            try
+            {
+                FillPapers(read);
+                var saved = CurrentDestination();
+                if (saved is not null
+                    && string.Equals(saved.QueueName, queueName, StringComparison.OrdinalIgnoreCase)
+                    && SavedQueueSelection.PaperStillAnnounced(read, saved.PaperName))
+                {
+                    SelectPaper(saved.PaperName);
+                    ApplyOptions(saved.Defaults ?? PrintOptions.ForPaper(saved.PaperName ?? ""));
+                    DestinationStatus.Text = AppendWarnings(Describe(saved));
+                }
+                else
+                {
+                    DestinationStatus.Text = AppendWarnings("Elige un papel anunciado por esa cola.");
+                }
+            }
+            finally
+            {
+                _loading = false;
+            }
+
+            UpdateCommandStates();
+        }
+        catch (Exception exception)
+        {
+            timer.Stop();
+            if (!IsCurrentDetail(token, queueName))
+            {
+                return;
+            }
+
+            DestinationStatus.Text = AppendWarnings($"No se pudo leer la cola «{queueName}». {exception.Message}");
+            UpdateCommandStates();
+        }
+    }
+
+    private bool IsCurrentDetail(int token, string queueName) =>
+        token == _detailToken
+        && string.Equals(QueueBox.SelectedItem as string, queueName, StringComparison.OrdinalIgnoreCase);
+
+    private WaitNotice StartWait(Action onWait)
+    {
+        var notice = new WaitNotice();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            if (notice.Completed)
+            {
+                return;
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!notice.Completed)
+                {
+                    onWait();
+                }
+            });
+        });
+        return notice;
+    }
+
+    private sealed class WaitNotice
+    {
+        public bool Completed { get; private set; }
+
+        public void Stop() => Completed = true;
+    }
+
+    private string AppendWarnings(string message)
+    {
+        if (_host.Catalog.Warnings.Count == 0)
+        {
+            return message;
+        }
+
+        return message + " " + string.Join(" ", _host.Catalog.Warnings);
+    }
+
+    private void UpdateCommandStates()
+    {
+        var catalogFailed = _host.Catalog.RefreshError is not null;
+        QueueBox.IsEnabled = _namesReady && !catalogFailed;
+        var queue = SelectedQueue();
+        var paperReady = queue is { Detail: QueueDetail.Ready } && PaperBox.SelectedItem is string;
+        PaperBox.IsEnabled = _namesReady && !catalogFailed && queue is { Detail: QueueDetail.Ready };
+        SaveButton.IsEnabled = _namesReady && paperReady && !catalogFailed;
+        var saved = _destinationId is null ? null : _host.Destinations.Find(_destinationId);
+        if (saved is null && _namesReady)
+        {
+            saved = CurrentDestination();
+        }
+
+        var destinationMatches = saved is not null
+            && queue is not null
+            && string.Equals(queue.QueueName, saved.QueueName, StringComparison.OrdinalIgnoreCase);
+        PrintButton.IsEnabled = _namesReady && !_printing && _snapshotReady && paperReady && destinationMatches && !catalogFailed;
     }
 
     private void FillPapers(InstalledQueue? queue)
@@ -175,6 +468,7 @@ public sealed partial class MainWindow : Window
         _host.Destinations.Save(destination);
         _host.Log.Write($"Destino guardado {_destinationId} {options.Describe()}.");
         DestinationStatus.Text = Describe(destination);
+        UpdateCommandStates();
     }
 
     private void OnRangeModeChanged(object sender, RoutedEventArgs e) => UpdateRangeBoxes();
@@ -283,7 +577,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             _printing = false;
-            PrintButton.IsEnabled = true;
+            UpdateCommandStates();
             RefreshHistory();
         }
     }
@@ -329,34 +623,111 @@ public sealed partial class MainWindow : Window
     private void RefreshHistory()
     {
         var selected = SelectedHistory()?.Id;
-        _refreshingHistory = true;
+        _ = LoadHistoryAsync(selected);
+    }
+
+    private async Task LoadHistoryAsync(string? selected)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var token = ++_historyToken;
         try
         {
-            _history.Clear();
-            HistoryList.Items.Clear();
-            foreach (var record in _host.Jobs.List().OrderByDescending(record => record.ReceivedAt))
+            var records = await Task.Run(() =>
             {
-                var confirmation = string.IsNullOrWhiteSpace(record.PhysicalConfirmation)
-                    ? "confirmación física pendiente"
-                    : "confirmación física: " + record.PhysicalConfirmation;
-                var optionsText = record.Options?.Describe() ?? record.PaperName;
-                var label = $"{record.ReceivedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} · {record.Id} · {JobPhaseText.Describe(record.Phase)} · {record.QueueName} · {optionsText} · {record.Detail} · {confirmation}";
-                _history.Add(record);
-                HistoryList.Items.Add(label);
-            }
+                if (_host.Jobs is FileJobRecordStore store)
+                {
+                    store.RebuildFromDisk();
+                }
 
-            var index = _history.FindIndex(record => string.Equals(record.Id, selected, StringComparison.Ordinal));
-            if (index >= 0)
+                return _host.Jobs.List().OrderByDescending(record => record.ReceivedAt).ToList();
+            });
+            DispatcherQueue.TryEnqueue(() =>
             {
-                HistoryList.SelectedIndex = index;
-            }
+                if (token != _historyToken)
+                {
+                    return;
+                }
+
+                ApplyHistory(records, selected, token);
+                if (_host.Jobs is FileJobRecordStore reloaded)
+                {
+                    foreach (var warning in reloaded.ReadWarnings)
+                    {
+                        _host.Log.Write(warning);
+                    }
+                }
+
+                _host.Log.Timing(
+                    "history-load",
+                    Stopwatch.GetElapsedTime(started),
+                    ("baseline", "read"),
+                    ("count", records.Count.ToString()),
+                    ("result", "ready"));
+            });
         }
-        finally
+        catch (Exception exception)
         {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (token != _historyToken)
+                {
+                    return;
+                }
+
+                PrintStatus.Text = "No se pudo leer el historial. " + exception.Message;
+                _host.Log.Write("Historial no leído. " + exception.Message);
+            });
+        }
+    }
+
+    private void ApplyHistory(IReadOnlyList<JobRecord> records, string? selected, int token)
+    {
+        _refreshingHistory = true;
+        _history.Clear();
+        HistoryList.Items.Clear();
+        _history.AddRange(records);
+        var rendered = 0;
+
+        void RenderBatch()
+        {
+            if (token != _historyToken)
+            {
+                return;
+            }
+
+            var take = Math.Min(40, records.Count - rendered);
+            for (var index = 0; index < take; index++)
+            {
+                HistoryList.Items.Add(HistoryLabel(records[rendered + index]));
+            }
+
+            rendered += take;
+            if (rendered < records.Count)
+            {
+                DispatcherQueue.TryEnqueue(RenderBatch);
+                return;
+            }
+
+            var selectedIndex = _history.FindIndex(record => string.Equals(record.Id, selected, StringComparison.Ordinal));
+            if (selectedIndex >= 0)
+            {
+                HistoryList.SelectedIndex = selectedIndex;
+            }
+
             _refreshingHistory = false;
+            UpdateConfirmButton();
         }
 
-        UpdateConfirmButton();
+        RenderBatch();
+    }
+
+    private static string HistoryLabel(JobRecord record)
+    {
+        var confirmation = string.IsNullOrWhiteSpace(record.PhysicalConfirmation)
+            ? "confirmación física pendiente"
+            : "confirmación física: " + record.PhysicalConfirmation;
+        var optionsText = record.Options?.Describe() ?? record.PaperName;
+        return $"{record.ReceivedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss} · {record.Id} · {JobPhaseText.Describe(record.Phase)} · {record.QueueName} · {optionsText} · {record.Detail} · {confirmation}";
     }
 
     private JobRecord? SelectedHistory()

@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- Execute the actual window coordination against simulated controls; no WinUI runtime. -->
+    <Compile Include="..\..\src\Windows\Desktop\MainWindow.xaml.cs" Link="Desktop\MainWindow.xaml.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\DesktopHost.cs" Link="Desktop\DesktopHost.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\StartupClock.cs" Link="Desktop\StartupClock.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\JobPhaseText.cs" Link="Desktop\JobPhaseText.cs" />
   </ItemGroup>
 
 </Project>

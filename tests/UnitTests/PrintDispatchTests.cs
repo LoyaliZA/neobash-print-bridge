@@ -209,6 +209,41 @@ public sealed class PrintDispatchTests
     }
 
     [Fact]
+    public async Task Dispatch_returns_before_the_spooler_finishes()
+    {
+        var destination = Destination("dest-star", "Star BSC10", "Rollo 80 x 297 mm");
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("Star BSC10", "Star BSC10", "Rollo 80 x 297 mm"));
+        _port.HoldOpen = true;
+
+        var dispatch = _dispatcher.DispatchAsync(Job("trabajo-abierto", "application/pdf", destination));
+        var signaled = await Task.WhenAny(_port.SubmitEntered.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.Same(_port.SubmitEntered.Task, signaled);
+        Assert.False(dispatch.IsCompleted);
+        _port.ReleaseSubmit.TrySetResult();
+        var result = await dispatch;
+        Assert.Equal(JobPhase.SubmittedToSpooler, result.Phase);
+        Assert.Single(_port.Submissions);
+    }
+
+    [Fact]
+    public async Task Cancellation_before_submission_is_failed_and_is_not_retried()
+    {
+        var destination = Destination("dest-star", "Star BSC10", "Rollo 80 x 297 mm");
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("Star BSC10", "Star BSC10", "Rollo 80 x 297 mm"));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var result = await _dispatcher.DispatchAsync(Job("trabajo-cancelado", "application/pdf", destination), cancellation.Token);
+
+        Assert.Equal(JobPhase.Failed, result.Phase);
+        Assert.Empty(_port.Submissions);
+        Assert.Equal(JobPhase.Failed, _jobs.Find("trabajo-cancelado")!.Phase);
+    }
+
+    [Fact]
     public void Records_physical_confirmation_without_printing_again()
     {
         _jobs.TryBegin(Job("trabajo-papel-visto", "application/pdf", Destination("dest-star", "Star BSC10", "A4")), "Star BSC10");
@@ -303,6 +338,8 @@ public sealed class PrintDispatchTests
         public JobRecord? Find(string id) => _items.TryGetValue(id, out var record) ? record : null;
 
         public IReadOnlyList<JobRecord> List() => _items.Values.OrderBy(record => record.ReceivedAt).ToList();
+
+        public IReadOnlyList<string> ListIds() => _items.Keys.ToList();
     }
 
     private sealed class RecordingPreparer : IDocumentPreparer
@@ -331,9 +368,21 @@ public sealed class PrintDispatchTests
 
         public Exception? Exception { get; set; }
 
-        public void Submit(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
+        public bool HoldOpen { get; set; }
+
+        public TaskCompletionSource SubmitEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseSubmit { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task SubmitAsync(PreparedDocument document, string queueName, string? paperName, CancellationToken cancellationToken)
         {
             Submissions.Add(new Submission(document, queueName, paperName));
+            SubmitEntered.TrySetResult();
+            if (HoldOpen)
+            {
+                await ReleaseSubmit.Task;
+            }
+
             if (Exception is not null)
             {
                 throw Exception;

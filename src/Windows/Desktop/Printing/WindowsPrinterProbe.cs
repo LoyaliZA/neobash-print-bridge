@@ -4,41 +4,38 @@ using Neobash.PrintBridge.Core.Dispatch;
 
 namespace Neobash.PrintBridge.Desktop;
 
-public sealed class WindowsPrinterCatalog : IPrinterCatalog
+public sealed class WindowsPrinterProbe : IPrinterProbe, IDisposable
 {
-    public IReadOnlyList<string> Warnings { get; private set; } = [];
+    private readonly StaQueue _sta = new();
 
-    public InstalledQueue? Find(string queueName) =>
-        List().FirstOrDefault(queue => string.Equals(queue.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
+    public IReadOnlyList<string> ListNames() => _sta.Run(ListNamesCore);
 
-    public IReadOnlyList<InstalledQueue> List()
+    public InstalledQueue? ReadDetails(string queueName) => _sta.Run(() => ReadDetailsCore(queueName));
+
+    public void Dispose() => _sta.Dispose();
+
+    private static IReadOnlyList<string> ListNamesCore()
     {
-        var queues = new List<InstalledQueue>();
-        var warnings = new List<string>();
+        var names = new List<string>();
         foreach (string? name in PrinterSettings.InstalledPrinters)
         {
-            if (string.IsNullOrWhiteSpace(name))
+            if (!string.IsNullOrWhiteSpace(name))
             {
-                continue;
-            }
-
-            try
-            {
-                queues.Add(Read(name));
-            }
-            catch (Exception exception)
-            {
-                warnings.Add($"No se pudo leer la cola «{name}»: {exception.Message}");
+                names.Add(name);
             }
         }
 
-        Warnings = warnings;
-        return queues;
+        return names;
     }
 
-    private static InstalledQueue Read(string queueName)
+    private static InstalledQueue? ReadDetailsCore(string queueName)
     {
         var settings = new PrinterSettings { PrinterName = queueName };
+        if (!settings.IsValid)
+        {
+            return null;
+        }
+
         var papers = new List<string>();
         foreach (PaperSize size in settings.PaperSizes)
         {

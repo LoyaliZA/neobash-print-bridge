@@ -7,6 +7,9 @@ public sealed class FileJobRecordStore : IJobRecordStore
 {
     private readonly string _root;
     private readonly Lock _gate = new();
+    private readonly Dictionary<string, JobRecord> _cache = new(StringComparer.Ordinal);
+    private readonly List<string> _readWarnings = [];
+    private bool _cacheLoaded;
 
     public FileJobRecordStore(string root)
     {
@@ -17,6 +20,27 @@ public sealed class FileJobRecordStore : IJobRecordStore
 
         _root = Path.Combine(Path.GetFullPath(root), "jobs");
         Directory.CreateDirectory(_root);
+    }
+
+    public IReadOnlyList<string> ReadWarnings
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _readWarnings.ToArray();
+            }
+        }
+    }
+
+    public void RebuildFromDisk()
+    {
+        lock (_gate)
+        {
+            _cache.Clear();
+            _readWarnings.Clear();
+            _cacheLoaded = false;
+        }
     }
 
     public bool TryBegin(PrintJob job, string queueName)
@@ -82,8 +106,10 @@ public sealed class FileJobRecordStore : IJobRecordStore
     {
         lock (_gate)
         {
+            // The list cache is only a display snapshot. Another Desktop instance
+            // may have committed a final phase or a physical confirmation since.
             var path = PathFor(id);
-            return File.Exists(path) ? Read(path) : null;
+            return File.Exists(path) ? TryRead(path) : null;
         }
     }
 
@@ -91,11 +117,40 @@ public sealed class FileJobRecordStore : IJobRecordStore
     {
         lock (_gate)
         {
+            EnsureLoaded();
+            return _cache.Values.Select(Clone).OrderBy(record => record.ReceivedAt).ToList();
+        }
+    }
+
+    public IReadOnlyList<string> ListIds()
+    {
+        lock (_gate)
+        {
             return Directory.EnumerateFiles(_root, "*.json")
-                .Select(Read)
-                .OrderBy(record => record.ReceivedAt)
+                .Select(path => Path.GetFileNameWithoutExtension(path))
                 .ToList();
         }
+    }
+
+    private void EnsureLoaded()
+    {
+        if (_cacheLoaded)
+        {
+            return;
+        }
+
+        _cache.Clear();
+        _readWarnings.Clear();
+        foreach (var path in Directory.EnumerateFiles(_root, "*.json"))
+        {
+            var record = TryRead(path);
+            if (record is not null)
+            {
+                _cache[record.Id] = Clone(record);
+            }
+        }
+
+        _cacheLoaded = true;
     }
 
     private JobRecord Require(string id)
@@ -107,7 +162,7 @@ public sealed class FileJobRecordStore : IJobRecordStore
             throw new InvalidOperationException("El trabajo no está registrado.");
         }
 
-        return Read(path);
+        return TryRead(path) ?? throw new InvalidOperationException("El historial del trabajo no se puede leer.");
     }
 
     private string PathFor(string id)
@@ -123,17 +178,53 @@ public sealed class FileJobRecordStore : IJobRecordStore
         return path;
     }
 
+    private JobRecord? TryRead(string path)
+    {
+        try
+        {
+            return Read(path);
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or IOException)
+        {
+            var id = Path.GetFileNameWithoutExtension(path);
+            _cache.Remove(id);
+            var warning = $"No se pudo leer el historial «{id}».";
+            if (!_readWarnings.Contains(warning, StringComparer.Ordinal))
+            {
+                _readWarnings.Add(warning);
+            }
+
+            return null;
+        }
+    }
+
     private static JobRecord Read(string path)
     {
         var record = JsonSerializer.Deserialize<JobRecord>(File.ReadAllText(path), DispatchJson.Options);
         return record ?? throw new InvalidOperationException("El historial del trabajo no se puede leer.");
     }
 
-    private static void Write(string path, JobRecord record)
+    private void Write(string path, JobRecord record)
     {
         var json = JsonSerializer.Serialize(record, DispatchJson.Options);
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, json);
         File.Move(temporary, path, overwrite: true);
+        _cache[record.Id] = Clone(record);
     }
+
+    private static JobRecord Clone(JobRecord record) => new()
+    {
+        Id = record.Id,
+        MediaType = record.MediaType,
+        LocalPath = record.LocalPath,
+        DestinationId = record.DestinationId,
+        PaperName = record.PaperName,
+        Options = record.Options,
+        QueueName = record.QueueName,
+        Phase = record.Phase,
+        Detail = record.Detail,
+        PhysicalConfirmation = record.PhysicalConfirmation,
+        ReceivedAt = record.ReceivedAt,
+    };
 }

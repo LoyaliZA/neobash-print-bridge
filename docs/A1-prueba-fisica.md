@@ -52,6 +52,10 @@ Con un documento que exceda el área imprimible, prueba primero **Cancelar**: no
 
 Ver papel en la Star BSC10 no aprueba otra impresora, otro formato, la captura OXPS, la red local, Android ni el acceso entre redes. Una impresora de hojas se prueba aparte, cuando haya un equipo disponible.
 
+## A1.4: arranque
+
+La ventana de A1.4 aparece antes de enumerar las colas y antes de leer el historial. Mientras tanto, cola, papel, guardar e imprimir permanecen deshabilitados. Si la cola guardada no está, no se elige otra. Un aviso de espera prolongada significa que el controlador todavía no ha respondido; no significa que la consulta se haya cancelado. Los pasos de papel de esta página no cambian y siguen pendientes hasta hacerlos desde la aplicación. Los tiempos de arranque se leen en [A1.4-rendimiento.md](A1.4-rendimiento.md). Esta nota no sustituye esa medición ni da la prueba física por hecha.
+
 ## A1.3: salida PDF al contexto de impresión
 
 La salida utiliza `FPDF_RenderPage` de PDFium, en modo de impresión Windows/EMF. NPB ya no convierte obligatoriamente cada página completa en PNG. PDFium conserva comandos de dibujo cuando puede; transparencias, imágenes y otros efectos pueden requerir rasterización interna. Esto no garantiza por sí solo igualdad visual con un navegador.

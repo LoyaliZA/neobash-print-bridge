@@ -1,3 +1,4 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Neobash.PrintBridge.Core.Capture;
 using Neobash.PrintBridge.Core.Dispatch;
@@ -7,6 +8,11 @@ namespace Neobash.PrintBridge.Desktop;
 public partial class App : Application
 {
     private Window? _window;
+
+    static App()
+    {
+        _ = StartupClock.ProcessToManaged;
+    }
 
     public App()
     {
@@ -24,18 +30,34 @@ public partial class App : Application
 
         var destinations = new FileDestinationStore(root);
         var jobs = new FileJobRecordStore(root);
-        JobRecovery.MarkInterruptedAsUncertain(jobs);
-        var catalog = new WindowsPrinterCatalog();
+        var log = new FileDiagnosticLog(Path.Combine(root, "diagnostic.log"));
+        log.Timing("process-start", StartupClock.ProcessToManaged, ("baseline", "process-start"));
+        var catalog = new CachingPrinterCatalog(new WindowsPrinterProbe(), log);
         var dispatcher = new PrintDispatcher(
             destinations,
             catalog,
             jobs,
-            new PdfDocumentPreparer(),
-            new PdfSpoolerAdapter());
-        var log = new FileDiagnosticLog(Path.Combine(root, "diagnostic.log"));
+            new PdfDocumentPreparer(log),
+            new PdfSpoolerAdapter(log));
         log.Write("NPB Desktop abierto. Los trabajos interrumpidos en recibido o preparado quedan incierto y no se reimprimen.");
 
-        _window = new MainWindow(new DesktopHost(destinations, jobs, catalog, dispatcher, log));
-        _window.Activate();
+        var window = new MainWindow(new DesktopHost(destinations, jobs, catalog, dispatcher, log));
+        _window = window;
+        log.Timing("window-activation", StartupClock.SinceManaged(), ("baseline", "managed-entry"));
+        window.Activate();
+        window.DispatcherQueue.TryEnqueue(() =>
+        {
+            log.Timing("ui-responsive", StartupClock.SinceManaged(), ("baseline", "managed-entry"), ("priority", "normal"));
+        });
+        var queuedLow = window.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            log.Timing("ui-responsive", StartupClock.SinceManaged(), ("baseline", "managed-entry"), ("priority", "low"));
+        });
+        if (!queuedLow)
+        {
+            log.Write("El callback de prioridad baja no se encoló. Eso no mide el primer fotograma.");
+        }
+
+        window.BeginStartup();
     }
 }
