@@ -126,6 +126,7 @@ public sealed partial class MainWindow : Window
 
     private void OnSizeChanged(object sender, WindowSizeChangedEventArgs args)
     {
+        ContentFrame.Margin = new Thickness(0, args.Size.Width < 880 ? 48 : 0, 0, 0);
         BrandSubtitle.Visibility = args.Size.Width < 550 ? Visibility.Collapsed : Visibility.Visible;
         Nav.PaneDisplayMode = args.Size.Width switch
         {
