@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -20,8 +20,9 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
-    <!-- Execute the actual window coordination against simulated controls; no WinUI runtime. -->
-    <Compile Include="..\..\src\Windows\Desktop\MainWindow.xaml.cs" Link="Desktop\MainWindow.xaml.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\Printing\WindowsQueueObserver.cs" Link="Desktop\WindowsQueueObserver.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\Session\DesktopSession.cs" Link="Desktop\DesktopSession.cs" />
+    <Compile Include="..\..\src\Windows\Desktop\Session\IUiQueue.cs" Link="Desktop\IUiQueue.cs" />
     <Compile Include="..\..\src\Windows\Desktop\DesktopHost.cs" Link="Desktop\DesktopHost.cs" />
     <Compile Include="..\..\src\Windows\Desktop\StartupClock.cs" Link="Desktop\StartupClock.cs" />
     <Compile Include="..\..\src\Windows\Desktop\JobPhaseText.cs" Link="Desktop\JobPhaseText.cs" />

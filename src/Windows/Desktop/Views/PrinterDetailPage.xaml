@@ -1,0 +1,53 @@
+<Page
+    x:Class="Neobash.PrintBridge.Desktop.PrinterDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Neobash.PrintBridge.Desktop">
+    <ScrollViewer>
+        <StackPanel Padding="28" Spacing="16">
+            <Button x:Name="BackButton" Content="Impresoras" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnBack" />
+            <Border Style="{StaticResource NpbCard}">
+                <Grid ColumnSpacing="20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <local:DeviceArt x:Name="Art" Grid.Column="0" />
+                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock x:Name="NameText"  FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="KindText"  Foreground="{StaticResource NpbMutedBrush}" TextWrapping="Wrap" />
+                        <Border Background="{StaticResource NpbIndigoSoftBrush}" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left">
+                            <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="{StaticResource NpbIndigoBrush}" />
+                        </Border>
+                    </StackPanel>
+                    <Button x:Name="PrintButton" Grid.Column="2" Content="Imprimir" Style="{StaticResource NpbPrimaryButton}" VerticalAlignment="Center" Click="OnPrint" />
+                </Grid>
+            </Border>
+            <StackPanel x:Name="DestinationSection" Spacing="8">
+                <TextBlock Text="Destinos de NPB" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock x:Name="DestinationEmpty" Text="Esta impresora todavía no tiene destinos." Foreground="{StaticResource NpbMutedBrush}" />
+                <StackPanel x:Name="DestinationList" Spacing="8" />
+                <Button Content="Nuevo destino" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnCreate" />
+            </StackPanel>
+            <StackPanel x:Name="VirtualNote" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="Registrar otra impresora virtual corresponde a una fase posterior." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+            </StackPanel>
+            <Border Style="{StaticResource NpbCard}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Trabajos de esta impresora" FontWeight="SemiBold" />
+                    <StackPanel x:Name="JobList" Spacing="6" />
+                    <Button Content="Ver trabajos" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnJobs" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Accesos de esta impresora" FontWeight="SemiBold" />
+                    <TextBlock Text="La vinculación con personas y equipos llegará con el agente. Esta entrega no invita ni concede permisos." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                    <Button Content="Ver la reserva de accesos" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Left" Click="OnAccess" />
+                </StackPanel>
+            </Border>
+            <TextBlock x:Name="Message" TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

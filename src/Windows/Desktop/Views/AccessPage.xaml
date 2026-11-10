@@ -1,0 +1,19 @@
+<Page
+    x:Class="Neobash.PrintBridge.Desktop.AccessPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer>
+        <StackPanel Padding="28" Spacing="16" MaxWidth="760">
+            <TextBlock Text="Accesos" FontSize="28" FontWeight="SemiBold" />
+            <Border Style="{StaticResource NpbCard}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Personas y equipos vinculados" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="Aquí se administrarán permisos y dispositivos vinculados cuando exista el agente local. Esta entrega no concede accesos, no invita y no simula una sesión." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <TextBlock Text="Ningún equipo vinculado." Foreground="{StaticResource NpbMutedBrush}" />
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
