@@ -1,0 +1,41 @@
+<Page
+    x:Class="Neobash.PrintBridge.Desktop.JobsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="28" ColumnSpacing="20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="360" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Spacing="12">
+            <TextBlock Text="Trabajos" FontSize="28" FontWeight="SemiBold" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SearchBox" PlaceholderText="Identificador o nombre" TextChanged="OnSearch" />
+                <ComboBox x:Name="PhaseBox" Grid.Column="1" HorizontalAlignment="Stretch" SelectionChanged="OnPhase" PlaceholderText="Estado">
+                    <ComboBoxItem Content="Todos" Tag="" />
+                    <ComboBoxItem Content="Enviado al spooler" Tag="SubmittedToSpooler" />
+                    <ComboBoxItem Content="Incierto" Tag="Uncertain" />
+                    <ComboBoxItem Content="Error" Tag="Failed" />
+                    <ComboBoxItem Content="Recibido" Tag="Received" />
+                    <ComboBoxItem Content="Preparado" Tag="Prepared" />
+                </ComboBox>
+                <ComboBox x:Name="DestinationBox" Grid.Column="2" HorizontalAlignment="Stretch" SelectionChanged="OnPhase" />
+            </Grid>
+            <ListView x:Name="History" SelectionChanged="OnSelected" />
+        </StackPanel>
+        <Border Grid.Column="1" Style="{StaticResource NpbCard}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Detalle" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock x:Name="Detail" TextWrapping="Wrap" Text="Elige un trabajo. Enviado al spooler no significa que haya salido papel." />
+                <TextBox x:Name="Note" PlaceholderText="Nota de quien vio el papel" />
+                <Button x:Name="Confirm" Content="Anotar confirmación física" Style="{StaticResource NpbPrimaryButton}" IsEnabled="False" Click="OnConfirm" />
+                <TextBlock Text="La confirmación no vuelve a enviar el trabajo. Un resultado incierto no se reimprime solo." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>

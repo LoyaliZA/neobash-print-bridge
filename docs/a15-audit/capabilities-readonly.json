@@ -1,0 +1,856 @@
+{
+  "observedAt": "2026-11-10T04:36:56.0849767+00:00",
+  "queues": [
+    {
+      "queue": "Star BSC10 (Copiar 1)",
+      "driver": "Star BSC10",
+      "port": "USB005",
+      "devMode": {
+        "totalBytes": 1080,
+        "publicBytes": 220,
+        "privateBytes": 860,
+        "fields": "0780EF43",
+        "privateDataDecoded": false
+      },
+      "status": "Offline",
+      "jobs": 0,
+      "features": [
+        {
+          "name": "psk:DocumentCollate",
+          "options": [
+            "psk:Collated",
+            "psk:Uncollated"
+          ]
+        },
+        {
+          "name": "psk:JobNUpAllDocumentsContiguously",
+          "options": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "psk:PresentationDirection",
+          "options": [
+            "psk:RightBottom",
+            "psk:BottomRight",
+            "psk:LeftBottom",
+            "psk:BottomLeft"
+          ]
+        },
+        {
+          "name": "ns0000:Borders",
+          "options": [
+            "ns0000:Off",
+            "ns0000:On"
+          ]
+        },
+        {
+          "name": "psk:PageMediaSize",
+          "options": [
+            "psk:NorthAmericaLetter",
+            "psk:ISOA4",
+            "ns0000:_72mmX200mm",
+            "ns0000:_72mmXReceipt",
+            "ns0000:_64mmX200mm",
+            "ns0000:_64mmXReceipt",
+            "ns0000:_508mmX200mm",
+            "ns0000:_508mmXReceipt",
+            "ns0000:_45mmX200mm",
+            "ns0000:_45mmXReceipt",
+            "psk:CustomMediaSize"
+          ]
+        },
+        {
+          "name": "psk:JobInputBin",
+          "options": [
+            "psk:AutoSelect",
+            "ns0000:Friction"
+          ]
+        },
+        {
+          "name": "ns0000:JobLocale",
+          "options": [
+            "ns0000:English_United_States",
+            "ns0000:Chinese_PRC",
+            "ns0000:Chinese_Taiwan_Region",
+            "ns0000:German_Standard",
+            "ns0000:Japanese",
+            "ns0000:Korean",
+            "ns0000:Arabic_Saudi_Arabia",
+            "ns0000:Hebrew",
+            "ns0000:Thai",
+            "ns0000:Afrikaans",
+            "ns0000:Albanian",
+            "ns0000:Arabic_Iraq",
+            "ns0000:Arabic_Egypt",
+            "ns0000:Arabic_Libya",
+            "ns0000:Arabic_Algeria",
+            "ns0000:Arabic_Morocco",
+            "ns0000:Arabic_Tunisia",
+            "ns0000:Arabic_Oman",
+            "ns0000:Arabic_Yemen",
+            "ns0000:Arabic_Syria",
+            "ns0000:Arabic_Jordan",
+            "ns0000:Arabic_Lebanon",
+            "ns0000:Arabic_Kuwait",
+            "ns0000:Arabic_UAE",
+            "ns0000:Arabic_Bahrain",
+            "ns0000:Arabic_Qatar",
+            "ns0000:Armenian",
+            "ns0000:Assamese",
+            "ns0000:Azeri_Latin",
+            "ns0000:Azeri_Cyrillic",
+            "ns0000:Basque",
+            "ns0000:Belarussian",
+            "ns0000:Bengali",
+            "ns0000:Bulgarian",
+            "ns0000:Burmese",
+            "ns0000:Catalan",
+            "ns0000:Chinese_Hong_Kong_SAR_PRC",
+            "ns0000:Chinese_Singapore",
+            "ns0000:Chinese_Macau",
+            "ns0000:Croatian",
+            "ns0000:Czech",
+            "ns0000:Danish",
+            "ns0000:Dutch_Netherlands",
+            "ns0000:Dutch_Belgium",
+            "ns0000:English_United_Kingdom",
+            "ns0000:English_Australian",
+            "ns0000:English_Canadian",
+            "ns0000:English_New_Zealand",
+            "ns0000:English_Ireland",
+            "ns0000:English_South_Africa",
+            "ns0000:English_Jamaica",
+            "ns0000:English_Caribbean",
+            "ns0000:English_Belize",
+            "ns0000:English_Trinidad",
+            "ns0000:English_Zimbabwe",
+            "ns0000:English_Philippines",
+            "ns0000:Estonian",
+            "ns0000:Faeroese",
+            "ns0000:Farsi",
+            "ns0000:Finnish",
+            "ns0000:French_Standard",
+            "ns0000:French_Belgian",
+            "ns0000:French_Canadian",
+            "ns0000:French_Switzerland",
+            "ns0000:French_Luxembourg",
+            "ns0000:French_Monaco",
+            "ns0000:Georgian",
+            "ns0000:German_Swiss",
+            "ns0000:German_Austrian",
+            "ns0000:German_Luxembourg",
+            "ns0000:German_Liechtenstein",
+            "ns0000:Greek",
+            "ns0000:Gujarati",
+            "ns0000:Hindi",
+            "ns0000:Hungarian",
+            "ns0000:Icelandic",
+            "ns0000:Indonesian",
+            "ns0000:Italian_Standard",
+            "ns0000:Italian_Swiss",
+            "ns0000:Kannada",
+            "ns0000:Kashmiri_India",
+            "ns0000:Kazakh",
+            "ns0000:Konkani",
+            "ns0000:Korean_Johab",
+            "ns0000:Latvian",
+            "ns0000:Lithuanian",
+            "ns0000:Lithuanian_Classic",
+            "ns0000:Macedonian",
+            "ns0000:Malay_Malaysia",
+            "ns0000:Malay_Brunei_Darussalam",
+            "ns0000:Malayalam",
+            "ns0000:Manipuri",
+            "ns0000:Marathi",
+            "ns0000:Nepali_India",
+            "ns0000:Norwegian_Bokmal",
+            "ns0000:Norwegian_Nynorsk",
+            "ns0000:Oriya",
+            "ns0000:Polish",
+            "ns0000:Portuguese_Brazil",
+            "ns0000:Portuguese_Standard",
+            "ns0000:Punjabi",
+            "ns0000:Romanian",
+            "ns0000:Russian",
+            "ns0000:Sanskrit",
+            "ns0000:Serbian_Cyrillic",
+            "ns0000:Serbian_Latin",
+            "ns0000:Sindhi",
+            "ns0000:Slovak",
+            "ns0000:Slovenian",
+            "ns0000:Spanish_Traditional_Sort",
+            "ns0000:Spanish_Mexican",
+            "ns0000:Spanish_Modern_Sort",
+            "ns0000:Spanish_Guatemala",
+            "ns0000:Spanish_Costa_Rica",
+            "ns0000:Spanish_Panama",
+            "ns0000:Spanish_Dominican_Republic",
+            "ns0000:Spanish_Venezuela",
+            "ns0000:Spanish_Colombia",
+            "ns0000:Spanish_Peru",
+            "ns0000:Spanish_Argentina",
+            "ns0000:Spanish_Ecuador",
+            "ns0000:Spanish_Chile",
+            "ns0000:Spanish_Uruguay",
+            "ns0000:Spanish_Paraguay",
+            "ns0000:Spanish_Bolivia",
+            "ns0000:Spanish_El_Salvador",
+            "ns0000:Spanish_Honduras",
+            "ns0000:Spanish_Nicaragua",
+            "ns0000:Spanish_Puerto_Rico",
+            "ns0000:Sutu",
+            "ns0000:Swahili_Kenya",
+            "ns0000:Swedish",
+            "ns0000:Swedish_Finland",
+            "ns0000:Tamil",
+            "ns0000:Tatar_Tatarstan",
+            "ns0000:Telugu",
+            "ns0000:Turkish",
+            "ns0000:Ukrainian",
+            "ns0000:Urdu_Pakistan",
+            "ns0000:Urdu_India",
+            "ns0000:Uzbek_Latin",
+            "ns0000:Uzbek_Cyrilli",
+            "ns0000:Vietnamese"
+          ]
+        },
+        {
+          "name": "psk:PageOrientation",
+          "options": [
+            "psk:Portrait",
+            "psk:Landscape"
+          ]
+        },
+        {
+          "name": "psk:PageResolution",
+          "options": [
+            "ns0000:XNormalYNormal"
+          ]
+        },
+        {
+          "name": "psk:PageMediaType",
+          "options": [
+            "ns0000:StandardThermalPaper"
+          ]
+        },
+        {
+          "name": "psk:PageTrueTypeFontMode",
+          "options": [
+            "psk:RenderAsBitmap",
+            "psk:DownloadAsRasterFont"
+          ]
+        }
+      ],
+      "papers": [
+        {
+          "name": "NorthAmericaLetter",
+          "Width": 816,
+          "Height": 1056
+        },
+        {
+          "name": "ISOA4",
+          "Width": 793.7007874015748,
+          "Height": 1122.5196850393702
+        }
+      ],
+      "orientations": [
+        "Portrait",
+        "Landscape"
+      ],
+      "resolutions": [],
+      "defaults": {
+        "paper": "NorthAmericaLetter",
+        "orientation": "Portrait",
+        "CopyCount": 1
+      },
+      "writableValidated": false
+    },
+    {
+      "queue": "POS80 Printer",
+      "driver": "POS80",
+      "port": "USB008",
+      "devMode": {
+        "totalBytes": 220,
+        "publicBytes": 220,
+        "privateBytes": 0,
+        "fields": "02002F53",
+        "privateDataDecoded": false
+      },
+      "status": "None",
+      "jobs": 0,
+      "features": [
+        {
+          "name": "psk:PageOutputColor",
+          "options": [
+            "psk:Monochrome"
+          ]
+        },
+        {
+          "name": "psk:JobInputBin",
+          "options": [
+            "psk:AutoSelect"
+          ]
+        },
+        {
+          "name": "psk:PageMediaType",
+          "options": [
+            "psk:Plain"
+          ]
+        },
+        {
+          "name": "psk:PageOrientation",
+          "options": [
+            "psk:Portrait",
+            "psk:Landscape"
+          ]
+        },
+        {
+          "name": "psk:PageMediaSize",
+          "options": [
+            "ns0000:User0000000256",
+            "ns0000:User0000000257",
+            "ns0000:User0000000258",
+            "ns0000:User0000000259"
+          ]
+        },
+        {
+          "name": "psk:PageResolution",
+          "options": [
+            null
+          ]
+        },
+        {
+          "name": "psk:PageScaling",
+          "options": [
+            "psk:CustomSquare",
+            "psk:None"
+          ]
+        }
+      ],
+      "papers": [],
+      "orientations": [
+        "Portrait",
+        "Landscape"
+      ],
+      "resolutions": [
+        {
+          "X": 203,
+          "Y": 203,
+          "quality": "Unknown"
+        }
+      ],
+      "defaults": {
+        "paper": "Unknown",
+        "orientation": "Portrait",
+        "CopyCount": 1
+      },
+      "writableValidated": false
+    },
+    {
+      "queue": "Brother HL-1210W series Printer",
+      "driver": "Brother HL-1210W series",
+      "port": "WSD (identifier omitted)",
+      "devMode": {
+        "totalBytes": 3408,
+        "publicBytes": 220,
+        "privateBytes": 3188,
+        "fields": "0001930F",
+        "privateDataDecoded": false
+      },
+      "status": "Offline",
+      "jobs": 0,
+      "features": [
+        {
+          "name": "psk:PageMediaSize",
+          "options": [
+            "psk:ISOA4",
+            "psk:NorthAmericaLetter",
+            "psk:NorthAmericaLegal",
+            "psk:NorthAmericaExecutive",
+            "psk:ISOA5",
+            "brpsk:ISOA5LongEdge",
+            "psk:ISOB5Envelope",
+            "psk:OtherMetricFolio",
+            "psk:ISOA3",
+            "psk:NorthAmericaTabloid",
+            "psk:CustomMediaSize"
+          ]
+        },
+        {
+          "name": "psk:PageOrientation",
+          "options": [
+            "psk:Landscape",
+            "psk:Portrait"
+          ]
+        },
+        {
+          "name": "psk:DocumentCollate",
+          "options": [
+            "psk:Uncollated",
+            "psk:Collated"
+          ]
+        },
+        {
+          "name": "psk:JobPageOrder",
+          "options": [
+            "psk:Standard"
+          ]
+        },
+        {
+          "name": "psk:PageMediaType",
+          "options": [
+            "psk:Plain",
+            "brpsk:RecyclePaper"
+          ]
+        },
+        {
+          "name": "psk:PageResolution",
+          "options": [
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "psk:PageOutputQuality",
+          "options": [
+            "psk:Normal"
+          ]
+        },
+        {
+          "name": "brpsk:PagePrintSetting",
+          "options": [
+            "brpsk:Graphics",
+            "brpsk:Text",
+            "brpsk:Manual"
+          ]
+        },
+        {
+          "name": "brpsk:PageGraphicsQuality",
+          "options": [
+            "brpsk:Graphics",
+            "brpsk:Text"
+          ]
+        },
+        {
+          "name": "brpsk:PageGraphicsHalftone",
+          "options": [
+            "brpsk:UsePrinterHalftone",
+            "brpsk:UseSystemHalftone"
+          ]
+        },
+        {
+          "name": "psk:PageOutputColor",
+          "options": [
+            "psk:Monochrome"
+          ]
+        },
+        {
+          "name": "psk:PageColorManagement",
+          "options": [
+            "psk:Driver"
+          ]
+        },
+        {
+          "name": "psk:PagePhotoPrintingIntent",
+          "options": [
+            "psk:None"
+          ]
+        },
+        {
+          "name": "psk:PageICMRenderingIntent",
+          "options": [
+            "psk:Photographs"
+          ]
+        },
+        {
+          "name": "psk:JobNUpAllDocumentsContiguously",
+          "options": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "psk:PresentationDirection",
+          "options": [
+            "psk:RightBottom",
+            "psk:BottomRight",
+            "psk:LeftBottom",
+            "psk:BottomLeft"
+          ]
+        },
+        {
+          "name": "brpsk:BorderLine",
+          "options": [
+            "brpsk:None",
+            "brpsk:SolidLine",
+            "brpsk:BreakLine"
+          ]
+        },
+        {
+          "name": "psk:PagePoster",
+          "options": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "brpsk:PagePrintCutOutLine",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "psk:JobDuplexAllDocumentsContiguously",
+          "options": [
+            "psk:OneSided",
+            "psk:TwoSidedShortEdge",
+            "psk:TwoSidedLongEdge"
+          ]
+        },
+        {
+          "name": "psk:JobBindAllDocuments",
+          "options": [
+            "psk:BindBottom",
+            "psk:BindLeft",
+            "psk:BindRight",
+            "psk:BindTop",
+            "psk:Booklet",
+            "brpsk:BookletReverseFlip"
+          ]
+        },
+        {
+          "name": "brpsk:BindingGutterControl",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:BindingUnit",
+          "options": [
+            "brpsk:microns",
+            "brpsk:inches"
+          ]
+        },
+        {
+          "name": "brpsk:BookletPrintingMethod",
+          "options": [
+            "brpsk:AllPagesAtOnce",
+            "brpsk:DivideIntoSets"
+          ]
+        },
+        {
+          "name": "psk:PageInputBin",
+          "options": [
+            "brpsk:Tray1"
+          ]
+        },
+        {
+          "name": "psk:PageScaling",
+          "options": [
+            "psk:None",
+            "brpsk:FitToPaper",
+            "psk:CustomSquare"
+          ]
+        },
+        {
+          "name": "brpsk:FitMediaSize",
+          "options": [
+            "psk:ISOA4",
+            "psk:NorthAmericaLetter",
+            "psk:NorthAmericaLegal",
+            "psk:NorthAmericaExecutive",
+            "psk:ISOA5",
+            "brpsk:ISOA5LongEdge",
+            "psk:ISOB5Envelope",
+            "psk:OtherMetricFolio",
+            "psk:CustomMediaSize"
+          ]
+        },
+        {
+          "name": "brpsk:PageReverseImage",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "psk:PageWatermark",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:LayoutOrder",
+          "options": [
+            "brpsk:Background",
+            "brpsk:Foreground"
+          ]
+        },
+        {
+          "name": "brpsk:OverlayMethod",
+          "options": [
+            "brpsk:Transparent",
+            "brpsk:Opaque"
+          ]
+        },
+        {
+          "name": "brpsk:OutlineTxt",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:CustomSettings",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:PageHeaderFooter",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:DateFormat",
+          "options": [
+            "brpsk:Type1",
+            "brpsk:Type2",
+            "brpsk:Type3",
+            "brpsk:Type4",
+            "brpsk:None"
+          ]
+        },
+        {
+          "name": "brpsk:TimeFormat",
+          "options": [
+            "brpsk:Type1",
+            "brpsk:Type2",
+            "brpsk:Type3",
+            "brpsk:Type4",
+            "brpsk:None"
+          ]
+        },
+        {
+          "name": "brpsk:IDPrint",
+          "options": [
+            "brpsk:UserName",
+            "brpsk:Custom",
+            "brpsk:None"
+          ]
+        },
+        {
+          "name": "brpsk:PositionX",
+          "options": [
+            "brpsk:Left",
+            "brpsk:Center",
+            "brpsk:Right"
+          ]
+        },
+        {
+          "name": "brpsk:PositionY",
+          "options": [
+            "brpsk:Top",
+            "brpsk:Bottom"
+          ]
+        },
+        {
+          "name": "brpsk:Background",
+          "options": [
+            "brpsk:Transparent",
+            "brpsk:Opaque"
+          ]
+        },
+        {
+          "name": "brpsk:PageImproveGrayPrinting",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:PageImprovePatternPrinting",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:PageImproveThinLine",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobDeviceEconomyMode",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobDensityAdjustment",
+          "options": [
+            "brpsk:PrinterDefault",
+            "brpsk:Manual"
+          ]
+        },
+        {
+          "name": "brpsk:JobReducePaperCurl",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobImproveTonerFixing",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobTonerTranscriptionLevel",
+          "options": [
+            "brpsk:VeryHigh",
+            "brpsk:High",
+            "brpsk:Medium",
+            "brpsk:Low",
+            "brpsk:VeryLow"
+          ]
+        },
+        {
+          "name": "brpsk:JobSkipBlankPage",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobPrintPreview",
+          "options": [
+            "brpsk:Off",
+            "brpsk:On"
+          ]
+        },
+        {
+          "name": "brpsk:JobArchiveAllDocuments",
+          "options": [
+            "brpsk:None",
+            "brpsk:SmallPDF",
+            "brpsk:MediumPDF",
+            "brpsk:NonDegradedPDF"
+          ]
+        },
+        {
+          "name": "brpsk:PageCustomTextColor",
+          "options": [
+            "brpsk:None",
+            "brpsk:Black"
+          ]
+        },
+        {
+          "name": "psk:JobDigitalSignatureProcessing",
+          "options": [
+            "psk:PrintInvalidSignatures"
+          ]
+        }
+      ],
+      "papers": [
+        {
+          "name": "ISOA4",
+          "Width": 793.7007874015748,
+          "Height": 1122.5196850393702
+        },
+        {
+          "name": "NorthAmericaLetter",
+          "Width": 816,
+          "Height": 1056
+        },
+        {
+          "name": "NorthAmericaLegal",
+          "Width": 816,
+          "Height": 1344
+        },
+        {
+          "name": "NorthAmericaExecutive",
+          "Width": 696,
+          "Height": 1008
+        },
+        {
+          "name": "ISOA5",
+          "Width": 559.3700787401575,
+          "Height": 793.7007874015748
+        },
+        {
+          "name": "ISOB5Envelope",
+          "Width": 665.1968503937007,
+          "Height": 944.8818897637796
+        },
+        {
+          "name": "OtherMetricFolio",
+          "Width": 816,
+          "Height": 1248
+        },
+        {
+          "name": "ISOA3",
+          "Width": 1122.5196850393702,
+          "Height": 1587.4015748031495
+        },
+        {
+          "name": "NorthAmericaTabloid",
+          "Width": 1056,
+          "Height": 1632
+        }
+      ],
+      "orientations": [
+        "Landscape",
+        "Portrait"
+      ],
+      "resolutions": [
+        {
+          "X": 300,
+          "Y": 300,
+          "quality": "Unknown"
+        },
+        {
+          "X": 600,
+          "Y": 600,
+          "quality": "Unknown"
+        },
+        {
+          "X": 1200,
+          "Y": 1200,
+          "quality": "Unknown"
+        }
+      ],
+      "defaults": {
+        "paper": "NorthAmericaLetter",
+        "orientation": "Portrait",
+        "CopyCount": 1
+      },
+      "writableValidated": false
+    }
+  ]
+}

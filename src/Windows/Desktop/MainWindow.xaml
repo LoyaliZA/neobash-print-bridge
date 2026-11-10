@@ -2,67 +2,50 @@
     x:Class="Neobash.PrintBridge.Desktop.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Neobash Print Bridge — A1.4">
-    <ScrollViewer>
-        <StackPanel Padding="24" Spacing="16" MaxWidth="880">
-            <TextBlock
-                TextWrapping="Wrap"
-                Text="NPB Desktop envía un PDF que ya existe a una cola de este equipo. El controlador tiene que estar instalado aquí. Que el spooler acepte el trabajo no confirma que haya salido papel." />
-
-            <StackPanel Spacing="8">
-                <TextBlock Text="Cola" />
-                <ComboBox x:Name="QueueBox" HorizontalAlignment="Stretch" PlaceholderText="Elige una cola física" IsEnabled="False" />
-                <TextBlock Text="Papel anunciado por esa cola" />
-                <ComboBox x:Name="PaperBox" HorizontalAlignment="Stretch" PlaceholderText="Elige un papel anunciado" IsEnabled="False" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="RefreshButton" Content="Actualizar colas" Click="OnRefresh" />
-                    <Button x:Name="SaveButton" Content="Guardar destino" Click="OnSave" IsEnabled="False" />
-                </StackPanel>
-                <TextBlock x:Name="DestinationStatus" TextWrapping="Wrap" />
+    Title="Neobash Print Bridge">
+    <Grid Background="{StaticResource NpbCanvasBrush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid Padding="20,10" ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource NpbIndigoBrush}">
+                <FontIcon Glyph="&#xE749;" Foreground="White" FontSize="16" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="Neobash Print Bridge" TextWrapping="Wrap" FontWeight="SemiBold" />
+                <TextBlock x:Name="BrandSubtitle" Text="Centro de dispositivos" FontSize="12" Foreground="{StaticResource NpbMutedBrush}" />
             </StackPanel>
-
-            <StackPanel Spacing="8">
-                <TextBlock Text="Impresión manual" FontWeight="SemiBold" />
-                <TextBlock
-                    TextWrapping="Wrap"
-                    Text="Una página por hoja. El porcentaje, cuando se elige, se aplica al tamaño físico del PDF. No se combina con un ajuste automático." />
-                <TextBlock TextWrapping="Wrap" Text="Si el tamaño real o el porcentaje excede el área imprimible, verás las medidas y podrás cancelar o confirmar un posible recorte para ese envío." />
-                <Button x:Name="PickButton" Content="Elegir PDF" Click="OnPickPdf" />
-                <TextBlock x:Name="PdfPath" TextWrapping="Wrap" Text="Ningún PDF elegido." />
-                <TextBlock Text="Copias" />
-                <TextBox x:Name="CopiesBox" Text="1" />
-                <TextBlock Text="Páginas" />
-                <CheckBox x:Name="AllPagesBox" Content="Todas las páginas" IsChecked="True" Checked="OnRangeModeChanged" Unchecked="OnRangeModeChanged" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBox x:Name="FirstPageBox" Width="120" PlaceholderText="Desde" IsEnabled="False" />
-                    <TextBox x:Name="LastPageBox" Width="120" PlaceholderText="Hasta" IsEnabled="False" />
-                </StackPanel>
-                <TextBlock Text="Orientación" />
-                <ComboBox x:Name="OrientationBox" HorizontalAlignment="Stretch" SelectedIndex="0">
-                    <ComboBoxItem Content="Vertical" />
-                    <ComboBoxItem Content="Horizontal" />
-                </ComboBox>
-                <TextBlock Text="Escala" />
-                <ComboBox x:Name="ScaleBox" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="OnScaleChanged">
-                    <ComboBoxItem Content="Tamaño real" />
-                    <ComboBoxItem Content="Ajustar al área imprimible" />
-                    <ComboBoxItem Content="Porcentaje" />
-                </ComboBox>
-                <TextBlock Text="Porcentaje del tamaño físico del PDF" />
-                <TextBox x:Name="PercentBox" PlaceholderText="Por ejemplo, 90" IsEnabled="False" />
-                <Button x:Name="PrintButton" Content="Imprimir" Click="OnPrint" IsEnabled="False" />
-                <TextBlock x:Name="PrintStatus" TextWrapping="Wrap" />
-            </StackPanel>
-
-            <StackPanel Spacing="8">
-                <TextBlock Text="Historial" />
-                <ListView x:Name="HistoryList" Height="240" SelectionChanged="OnHistorySelected" />
-                <TextBox x:Name="ConfirmationNote" PlaceholderText="Nota de quien vio el papel" />
-                <Button x:Name="ConfirmButton" Content="Anotar confirmación física" Click="OnConfirm" IsEnabled="False" />
-                <TextBlock
-                    TextWrapping="Wrap"
-                    Text="La confirmación física es una nota aparte. No vuelve a enviar el trabajo. Un resultado incierto no se reimprime solo." />
-            </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        </Grid>
+        <NavigationView
+            x:Name="Nav" Grid.Row="1"
+            IsBackButtonVisible="Visible"
+            IsBackEnabled="False"
+            BackRequested="OnBack"
+            IsSettingsVisible="False"
+            PaneDisplayMode="Left"
+            OpenPaneLength="240"
+            CompactPaneLength="72"
+            ItemInvoked="OnNavigate">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Tag="home" Content="Inicio">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="printers" Content="Impresoras">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE749;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="print" Content="Imprimir">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE956;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="jobs" Content="Trabajos">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="connections" Content="Conexiones">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Tag="settings" Content="Ajustes">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
 </Window>

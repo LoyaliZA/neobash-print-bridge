@@ -1,0 +1,33 @@
+<Page
+    x:Class="Neobash.PrintBridge.Desktop.PrintersPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Neobash.PrintBridge.Desktop"
+    Background="{StaticResource NpbCanvasBrush}">
+    <ScrollViewer>
+        <StackPanel Padding="28" Spacing="16">
+            <TextBlock Text="Mis impresoras" FontSize="28" FontWeight="SemiBold" />
+            <StackPanel Spacing="8">
+                <TextBox x:Name="SearchBox" PlaceholderText="Buscar por nombre" TextChanged="OnFilter" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Todas" Click="OnFilterClick" Tag="all" />
+                    <Button Content="Físicas" Click="OnFilterClick" Tag="physical" />
+                    <Button Content="Software" Click="OnFilterClick" Tag="software" />
+                    <Button Content="NPB" Click="OnFilterClick" Tag="virtual" />
+                    <Button Content="Actualizar" Style="{StaticResource NpbQuietButton}" Click="OnRefresh" />
+                </StackPanel>
+            </StackPanel>
+            <TextBlock x:Name="EmptyText" Text="No hay colas que coincidan con esta búsqueda." Foreground="{StaticResource NpbMutedBrush}" Visibility="Collapsed" />
+            <ItemsControl x:Name="List">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><ItemsWrapGrid Orientation="Horizontal" ItemWidth="320" ItemHeight="264" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:DeviceCardModel">
+                        <local:DeviceCard Model="{x:Bind}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

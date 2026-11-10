@@ -30,6 +30,7 @@ public partial class App : Application
 
         var destinations = new FileDestinationStore(root);
         var jobs = new FileJobRecordStore(root);
+        var preferences = new FilePreferenceStore(root);
         var log = new FileDiagnosticLog(Path.Combine(root, "diagnostic.log"));
         log.Timing("process-start", StartupClock.ProcessToManaged, ("baseline", "process-start"));
         var catalog = new CachingPrinterCatalog(new WindowsPrinterProbe(), log);
@@ -41,7 +42,7 @@ public partial class App : Application
             new PdfSpoolerAdapter(log));
         log.Write("NPB Desktop abierto. Los trabajos interrumpidos en recibido o preparado quedan incierto y no se reimprimen.");
 
-        var window = new MainWindow(new DesktopHost(destinations, jobs, catalog, dispatcher, log));
+        var window = new MainWindow(new DesktopHost(destinations, jobs, catalog, dispatcher, log), preferences);
         _window = window;
         log.Timing("window-activation", StartupClock.SinceManaged(), ("baseline", "managed-entry"));
         window.Activate();

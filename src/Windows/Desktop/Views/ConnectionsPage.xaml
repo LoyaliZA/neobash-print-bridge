@@ -1,0 +1,41 @@
+<Page
+    x:Class="Neobash.PrintBridge.Desktop.ConnectionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer>
+        <StackPanel Padding="28" Spacing="16" MaxWidth="880">
+            <TextBlock Text="Conexiones" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock Text="Estos módulos describen el camino del producto. Solo el equipo local está presente en esta entrega." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+            <Border Style="{StaticResource NpbCard}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Equipo local" FontWeight="SemiBold" />
+                    <TextBlock Text="NPB Desktop administra las colas de este equipo." Foreground="{StaticResource NpbReadyBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Red local" FontWeight="SemiBold" />
+                    <TextBlock Text="No disponible. Publicar destinos en la red queda para una fase posterior." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Integraciones externas" FontWeight="SemiBold" />
+                    <TextBlock Text="No disponible." Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="GELIA-NV" FontWeight="SemiBold" />
+                    <TextBlock Text="Integración futura. NPB no depende de GELIA y no hay una conexión que mostrar." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource NpbCard}" Background="{StaticResource NpbQuietBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Conexión remota" FontWeight="SemiBold" />
+                    <TextBlock Text="No disponible. No hay un agente en ejecución ni un enlace remoto." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,15 @@
+<UserControl
+    x:Class="Neobash.PrintBridge.Desktop.DeviceArt"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Background="{StaticResource NpbWellBrush}" CornerRadius="16" Height="88">
+        <Viewbox Width="72" Height="72">
+            <Canvas Width="72" Height="72">
+                <Path x:Name="PhysicalPath" Fill="{StaticResource NpbIndigoBrush}" Data="M12,20 H60 A6,6 0 0 1 66,26 V46 H6 V26 A6,6 0 0 1 12,20 Z M10,48 H62 V58 A4,4 0 0 1 58,62 H14 A4,4 0 0 1 10,58 Z M28,28 H44 V36 H28 Z" />
+                <Path x:Name="ReceiptPath" Fill="{StaticResource NpbIndigoBrush}" Visibility="Collapsed" Data="M20,8 H52 V64 L46,58 L40,64 L34,58 L28,64 L22,58 L20,60 Z M28,20 H44 V24 H28 Z M28,30 H44 V34 H28 Z" />
+                <Path x:Name="VirtualPath" Fill="#0F766E" Visibility="Collapsed" Data="M14,18 H58 A4,4 0 0 1 62,22 V40 H10 V22 A4,4 0 0 1 14,18 Z M18,44 H54 V52 A4,4 0 0 1 50,56 H22 A4,4 0 0 1 18,52 Z M30,26 H42 V34 H30 Z" />
+                <FontIcon x:Name="Fallback" FontFamily="Segoe Fluent Icons" Glyph="&#xE749;" FontSize="28" Foreground="{StaticResource NpbIndigoBrush}" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Canvas>
+        </Viewbox>
+    </Border>
+</UserControl>
