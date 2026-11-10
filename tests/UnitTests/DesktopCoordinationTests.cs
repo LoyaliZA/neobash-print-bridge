@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Neobash.PrintBridge.Core.Capture;
 using Neobash.PrintBridge.Core.Dispatch;
 using Neobash.PrintBridge.Desktop;
@@ -12,20 +13,20 @@ public sealed class DesktopCoordinationTests : IDisposable
     public async Task Refresh_disables_save_and_print_even_with_old_ready_paper()
     {
         var probe = new Probe();
-        var window = Create(probe);
-        await window.TestLoadNames();
-        await window.TestLoadDetails("B");
-        window.PaperBox.SelectedItem = "B paper";
-        window.TestSnapshotReady();
-        Assert.True(window.SaveButton.IsEnabled);
-        Assert.True(window.PrintButton.IsEnabled);
+        var session = Create(probe);
+        await session.LoadNamesAsync();
+        await session.LoadDetailsAsync("B");
+        session.SelectPaper("B paper");
+        await session.RecoverAsync();
+        Assert.True(session.CanSave);
+        Assert.True(session.CanPrint);
         probe.BlockNames = true;
-        var refresh = window.TestLoadNames();
+        var refresh = session.LoadNamesAsync();
         try
         {
             await probe.NamesEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.False(window.SaveButton.IsEnabled);
-            Assert.False(window.PrintButton.IsEnabled);
+            Assert.False(session.CanSave);
+            Assert.False(session.CanPrint);
         }
         finally { probe.ReleaseNames.TrySetResult(); }
         await refresh;
@@ -37,24 +38,22 @@ public sealed class DesktopCoordinationTests : IDisposable
     public async Task Late_A_success_or_failure_cannot_replace_cached_B(bool fail)
     {
         var probe = new Probe { FailA = fail };
-        var window = Create(probe);
-        await window.TestLoadNames();
-        await window.TestLoadDetails("B");
-        // Call the production reader directly so its completion can be awaited.
-        // Selection events still exercise the cached-B branch of OnQueueChanged.
-        window.QueueBox.SelectedItem = "A";
+        var session = Create(probe);
+        await session.LoadNamesAsync();
+        await session.LoadDetailsAsync("B");
+        session.SelectQueue("A");
         await probe.DetailEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var pending = window.TestLoadDetails("A");
-        window.QueueBox.SelectedItem = "B";
-        window.PaperBox.SelectedItem = "B paper";
-        var message = window.DestinationStatus.Text;
+        var pending = session.LoadDetailsAsync("A");
+        session.SelectQueue("B");
+        session.SelectPaper("B paper");
+        var message = session.Status;
         Assert.Contains("«B»", message, StringComparison.Ordinal);
         probe.ReleaseDetail.TrySetResult();
         await pending;
-        Assert.Equal("B", window.QueueBox.SelectedItem);
-        Assert.Equal("B paper", window.PaperBox.SelectedItem);
-        Assert.Equal("B paper", Assert.Single(window.PaperBox.Items));
-        Assert.Equal(message, window.DestinationStatus.Text);
+        Assert.Equal("B", session.SelectedQueueName);
+        Assert.Equal("B paper", session.SelectedPaper);
+        Assert.Equal("B paper", Assert.Single(session.Papers));
+        Assert.Equal(message, session.Status);
     }
 
     [Fact]
@@ -65,32 +64,55 @@ public sealed class DesktopCoordinationTests : IDisposable
         disk.TryBegin(job, "B");
         disk.Update(job.Id, JobPhase.Prepared, "prepared");
         var jobs = new DelayedHistory(disk);
-        var window = Create(new Probe(), jobs);
-        var oldHistory = window.TestHistory();
+        var queue = new UiQueue();
+        var session = Create(new Probe(), jobs, queue);
+        var oldHistory = session.LoadHistoryAsync(null);
         try
         {
             await jobs.Captured.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await window.TestRecover();
+            await session.RecoverAsync();
             await jobs.SecondRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            // Await a new post-recovery load to remove scheduler timing from assertions.
-            await window.TestHistory();
-            window.DispatcherQueue.Drain();
-            Assert.Contains("incierto", Assert.Single(window.HistoryList.Items).ToString()!, StringComparison.OrdinalIgnoreCase);
+            await session.LoadHistoryAsync(null);
+            queue.Drain();
+            Assert.Contains("incierto", Assert.Single(session.HistoryLabels), StringComparison.OrdinalIgnoreCase);
         }
         finally { jobs.Release.TrySetResult(); }
         await oldHistory;
-        window.DispatcherQueue.Drain();
-        Assert.Contains("incierto", Assert.Single(window.HistoryList.Items).ToString()!, StringComparison.OrdinalIgnoreCase);
+        queue.Drain();
+        Assert.Contains("incierto", Assert.Single(session.HistoryLabels), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(JobPhase.Uncertain, new FileJobRecordStore(_root).Find(job.Id)!.Phase);
         Assert.False(disk.TryBegin(job, "B"));
     }
 
-    private MainWindow Create(Probe probe, IJobRecordStore? jobs = null)
+    private DesktopSession Create(Probe probe, IJobRecordStore? jobs = null, UiQueue? queue = null)
     {
         var destinations = new FileDestinationStore(_root);
         destinations.Save(new PrintDestination("dest", "B", "B", "B paper"));
-        return new MainWindow(new DesktopHost(destinations, jobs ?? new FileJobRecordStore(_root),
-            new CachingPrinterCatalog(probe), null!, new SilentLog()));
+        return new DesktopSession(new DesktopHost(
+            destinations,
+            jobs ?? new FileJobRecordStore(_root),
+            new CachingPrinterCatalog(probe),
+            null!,
+            new SilentLog()), queue ?? new UiQueue());
+    }
+
+    private sealed class UiQueue : IUiQueue
+    {
+        private readonly ConcurrentQueue<Action> _pending = new();
+
+        public bool TryEnqueue(Action action)
+        {
+            _pending.Enqueue(action);
+            return true;
+        }
+
+        public void Drain()
+        {
+            while (_pending.TryDequeue(out var action))
+            {
+                action();
+            }
+        }
     }
 
     private sealed class Probe : IPrinterProbe

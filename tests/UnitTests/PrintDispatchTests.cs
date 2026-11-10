@@ -285,6 +285,8 @@ public sealed class PrintDispatchTests
 
         public void Save(PrintDestination destination) => _items[destination.Id] = destination;
 
+        public bool Remove(string id) => _items.Remove(id);
+
         public PrintDestination? Find(string id) => _items.TryGetValue(id, out var destination) ? destination : null;
 
         public IReadOnlyList<PrintDestination> List() => _items.Values.ToList();

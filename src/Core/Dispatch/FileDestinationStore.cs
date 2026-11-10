@@ -43,6 +43,27 @@ public sealed class FileDestinationStore : IDestinationStore
         }
     }
 
+    public bool Remove(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException("El destino necesita un identificador.", nameof(id));
+        }
+
+        lock (_gate)
+        {
+            var items = Read();
+            var removed = items.RemoveAll(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            if (removed == 0)
+            {
+                return false;
+            }
+
+            Write(items);
+            return true;
+        }
+    }
+
     public PrintDestination? Find(string id)
     {
         lock (_gate)

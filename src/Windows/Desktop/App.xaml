@@ -1,12 +1,21 @@
 <Application
     x:Class="Neobash.PrintBridge.Desktop.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="Themes/Light.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="Page">
+                <Setter Property="Background" Value="{StaticResource NpbCanvasBrush}" />
+            </Style>
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI" />
+                <Setter Property="Foreground" Value="{StaticResource NpbInkBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
