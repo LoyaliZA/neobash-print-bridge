@@ -37,3 +37,11 @@ La instalación sideload confía el certificado público en el equipo y registra
 - [docs/POC-01.md](docs/POC-01.md)
 - [docs/installation.md](docs/installation.md)
 - [docs/roadmap.md](docs/roadmap.md)
+
+## B1: puente LAN PDF
+
+La escucha predeterminada es local; para dos PCs hay que seleccionar una IP LAN
+privada explicitamente. El envio usa `send --file` (`--pdf` sigue como alias).
+
+- [Auditoria correctiva Windows del PR #5](docs/B1-auditoria-correctiva.md)
+- [Prueba LAN entre dos Windows](docs/B1-prueba-LAN-Windows.md)

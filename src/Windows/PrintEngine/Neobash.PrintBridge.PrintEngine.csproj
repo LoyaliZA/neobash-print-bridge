@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>Neobash.PrintBridge.Desktop</RootNamespace>
+    <AssemblyName>Neobash.PrintBridge.PrintEngine</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+    <PackageReference Include="bblanchon.PDFium.Win32" Version="157.0.8100" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Neobash.PrintBridge.Core.csproj" />
+    <InternalsVisibleTo Include="Neobash.PrintBridge.WindowsPrintTests" />
+  </ItemGroup>
+</Project>
