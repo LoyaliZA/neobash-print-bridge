@@ -40,7 +40,7 @@ public static class CurrentUserSecretStore
     {
         if (CredentialManagerSecretStore.IsSupported)
         {
-            return new CredentialManagerSecretStore();
+            return new WindowsSecretStore(directory);
         }
 
         if (DpapiSecretStore.IsSupported)
@@ -49,6 +49,47 @@ public static class CurrentUserSecretStore
         }
 
         throw new PlatformNotSupportedException("Hace falta Credential Manager o DPAPI de la cuenta. Este equipo no ofrece ninguno.");
+    }
+}
+
+// Certificates include a base64 PFX and exceed the native credential blob limit.
+// Read legacy material without changing its identity; future certificate writes use DPAPI.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+public sealed class WindowsSecretStore(string directory) : ISecretStore
+{
+    private readonly CredentialManagerSecretStore _credentials = new();
+    private readonly DpapiSecretStore _protected = new(directory);
+
+    private static bool IsCertificate(string name) =>
+        name is PairingService.HostSecretName or PairingService.PendingSecretName;
+
+    public void Put(string name, byte[] secret)
+    {
+        if (IsCertificate(name) || secret.Length > 2560)
+        {
+            _protected.Put(name, secret);
+            _credentials.Delete(name);
+        }
+        else
+        {
+            _credentials.Put(name, secret);
+            _protected.Delete(name);
+        }
+    }
+
+    public byte[]? TryGet(string name)
+    {
+        var protectedValue = _protected.TryGet(name);
+        if (protectedValue is not null) return protectedValue;
+        var legacy = _credentials.TryGet(name);
+        if (legacy is not null && IsCertificate(name)) Put(name, legacy);
+        return legacy;
+    }
+
+    public void Delete(string name)
+    {
+        _protected.Delete(name);
+        _credentials.Delete(name);
     }
 }
 
@@ -88,6 +129,8 @@ public sealed class CredentialManagerSecretStore : ISecretStore
 
     public void Put(string name, byte[] secret)
     {
+        if (secret.Length > 2560)
+            throw new ArgumentException("Credential Manager admite como máximo 2560 bytes.", nameof(secret));
         var blob = Marshal.AllocHGlobal(secret.Length);
         try
         {
@@ -114,9 +157,11 @@ public sealed class CredentialManagerSecretStore : ISecretStore
 
     public byte[]? TryGet(string name)
     {
-        if (!NativeCredentials.CredRead(Prefix + name, NativeCredentials.CredTypeGeneric, 0, out var pointer) || pointer == IntPtr.Zero)
+        if (!NativeCredentials.CredRead(Prefix + name, NativeCredentials.CredTypeGeneric, 0, out var pointer))
         {
-            return null;
+            var error = Marshal.GetLastWin32Error();
+            if (error == 1168) return null; // ERROR_NOT_FOUND is the only missing-secret result.
+            throw new System.ComponentModel.Win32Exception(error);
         }
 
         try
@@ -124,7 +169,7 @@ public sealed class CredentialManagerSecretStore : ISecretStore
             var credential = Marshal.PtrToStructure<NativeCredentials.Credential>(pointer);
             if (credential.CredentialBlob == IntPtr.Zero || credential.CredentialBlobSize <= 0)
             {
-                return null;
+                throw new InvalidDataException("El secreto guardado esta vacio o no se puede leer.");
             }
 
             var secret = new byte[credential.CredentialBlobSize];
@@ -137,8 +182,14 @@ public sealed class CredentialManagerSecretStore : ISecretStore
         }
     }
 
-    public void Delete(string name) =>
-        NativeCredentials.CredDelete(Prefix + name, NativeCredentials.CredTypeGeneric, 0);
+    public void Delete(string name)
+    {
+        if (!NativeCredentials.CredDelete(Prefix + name, NativeCredentials.CredTypeGeneric, 0))
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (error != 1168) throw new System.ComponentModel.Win32Exception(error);
+        }
+    }
 }
 
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -157,7 +208,21 @@ public sealed class DpapiSecretStore : ISecretStore
     public void Put(string name, byte[] secret)
     {
         var protectedBytes = ProtectedData.Protect(secret, null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(PathFor(name), protectedBytes);
+        var path = PathFor(name);
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                file.Write(protectedBytes);
+                file.Flush(true);
+            }
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     public byte[]? TryGet(string name)

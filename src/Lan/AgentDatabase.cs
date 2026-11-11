@@ -447,6 +447,16 @@ public sealed class AgentDatabase : IDisposable, IJobRecordStore, IDestinationSt
             ("$id", deviceId)));
     }
 
+    public bool HasDevices()
+    {
+        lock (_gate)
+        {
+            using var connection = Open();
+            using var command = Command(connection, "SELECT 1 FROM devices LIMIT 1");
+            return command.ExecuteScalar() is not null;
+        }
+    }
+
     public void Revoke(string deviceId, DateTimeOffset now)
     {
         InImmediate(connection => Execute(

@@ -144,6 +144,8 @@ public sealed class PairingService
             return existing;
         }
 
+        if (_database.HasDevices())
+            throw new InvalidOperationException("Falta el certificado de una identidad con dispositivos vinculados. Restaure el almacén; no se regeneró el certificado.");
         var created = X509Certificate2Material.Create(hostName, _now().AddMinutes(-1), _now().AddDays(365));
         WriteMaterial(HostSecretName, created);
         return created;
