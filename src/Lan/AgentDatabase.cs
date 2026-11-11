@@ -268,7 +268,10 @@ public sealed class AgentDatabase : IDisposable, IJobRecordStore, IDestinationSt
                     : new CommitOutcome(CommitKind.Conflict, existing.Value.JobId, phase, existing.Value.Hash, existing.Value.DestinationId);
             }
 
-            if (ReadPublished(connection, destinationId) is null || !GrantExists(connection, deviceId, destinationId))
+            // Serialize the final authorization with Revoke in the same SQLite write transaction.
+            using var authorization = Command(connection, "SELECT 1 FROM devices WHERE device_id = $device AND revoked_at IS NULL");
+            authorization.Parameters.AddWithValue("$device", deviceId);
+            if (authorization.ExecuteScalar() is null || ReadPublished(connection, destinationId) is null || !GrantExists(connection, deviceId, destinationId))
             {
                 return new CommitOutcome(CommitKind.Unavailable, null, null, null, null);
             }
