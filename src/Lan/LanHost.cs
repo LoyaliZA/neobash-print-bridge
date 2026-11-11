@@ -27,6 +27,7 @@ public sealed class LanHost : IAsyncDisposable
 
     public static async Task<LanHost> StartAsync(LanSession session, IPAddress address, int port, CancellationToken cancellationToken)
     {
+        session.EnsureListenerOwnership();
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [] });
         builder.WebHost.UseSetting(WebHostDefaults.ServerUrlsKey, string.Empty);
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
@@ -45,7 +46,15 @@ public sealed class LanHost : IAsyncDisposable
         var app = builder.Build();
         var host = new LanHost(app, new Uri("https://127.0.0.1/"));
         Map(app, session, host);
-        await app.StartAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await app.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await app.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
         var feature = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
         var advertised = feature?.Addresses.FirstOrDefault() ?? app.Urls.FirstOrDefault();
         if (advertised is null || !Uri.TryCreate(advertised, UriKind.Absolute, out var uri))

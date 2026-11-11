@@ -6,6 +6,20 @@ public sealed class AgentSession(IConfiguration configuration) : BackgroundServi
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
+            await RunSessionAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch
+        {
+            Environment.ExitCode = 1;
+            throw;
+        }
+    }
+
+    private async Task RunSessionAsync(CancellationToken stoppingToken)
+    {
         var config = new AgentConfig();
         configuration.GetSection("Agent").Bind(config);
         var secrets = CurrentUserSecretStore.Create(config.ResolveDataDirectory());

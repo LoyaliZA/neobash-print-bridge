@@ -13,7 +13,7 @@ if (args.Length > 0 && args[0] is "pair" or "revoke" or "renew" or "stage")
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHostedService<AgentSession>();
 await builder.Build().RunAsync();
-return 0;
+return Environment.ExitCode;
 
 static AgentConfig LoadConfig()
 {
