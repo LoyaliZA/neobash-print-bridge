@@ -15,7 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\Core\Neobash.PrintBridge.Core.csproj" />
+    <ProjectReference Include="..\..\src\Lan\Neobash.PrintBridge.Lan.csproj" />
   </ItemGroup>
 
   <ItemGroup>

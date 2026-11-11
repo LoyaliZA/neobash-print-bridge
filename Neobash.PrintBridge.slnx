@@ -3,6 +3,9 @@
   <Folder Name="/src/Agent/">
     <Project Path="src/Agent/Neobash.PrintBridge.Agent.csproj" />
   </Folder>
+  <Folder Name="/src/Lan/">
+    <Project Path="src/Lan/Neobash.PrintBridge.Lan.csproj" />
+  </Folder>
   <Folder Name="/src/Windows/">
     <Project Path="src/Windows/Desktop/Neobash.PrintBridge.Desktop.csproj" />
     <Project Path="src/Windows/PrintEngine/Neobash.PrintBridge.PrintEngine.csproj" />
