@@ -1,0 +1,148 @@
+# Incremento 0 — seguridad
+
+Los controles de esta página son obligación del Incremento 1, no de la UI del Incremento 4. El repositorio de hoy no autentica, no escucha y no guarda credenciales. Donde se cita un archivo, es el comportamiento que el control tiene que conservar o el hueco que tiene que cerrar.
+
+## Límites de confianza
+
+- El equipo cliente es quien imprime. Su cola virtual captura. No es el anfitrión de la impresora física.
+- El equipo anfitrión ejecuta el agente en la sesión interactiva de quien opera ese equipo, y el controlador de la cola física.
+- La tarea MSIX solo escribe en su `LocalFolder`. No es un receptor de red. El manifiesto no le da `internetClient` ni `broadFileSystemAccess`.
+- La ventana Desktop no es el receptor y no está empaquetada. Su carpeta `%LOCALAPPDATA%\Neobash\PrintBridge\Desktop` no es el `LocalState` del paquete.
+- La red local no es una zona de confianza. Una máquina en el mismo segmento no queda autorizada por estar ahí.
+- El spooler no es un límite de confianza del papel. Aceptar el trabajo no demuestra que haya salido una hoja.
+- GELIA-NV no es un componente de confianza ni un canal. No hay cliente ni configuración.
+
+El agente no se expone a Internet. No se documenta un reenvío de puertos ni una escucha pensada para una interfaz pública. Este cambio no crea ni modifica reglas de firewall.
+
+## Amenazas y controles
+
+- Trabajo anónimo. Control: sin credencial de dispositivo no se crea fila ni se llama al spooler. No hay un modo de invitado.
+- Credencial robada de otro destino. Control: la autenticación no basta. La fila de permisos liga dispositivo y destino publicado. En el MVP ese permiso es uno. Otro destino se rechaza con la sesión TLS ya válida. Un nombre de cola de Windows en la petición se rechaza aunque la cola exista: el cliente solo elige un identificador publicado y concedido.
+- Suplantación del anfitrión. Control: la huella o la clave pública se verifica por un canal distinto del servidor todavía no autenticado. El código de un solo uso está ligado a esa huella. Un certificado distinto se rechaza. Está prohibido un callback que devuelva verdadero ante cualquier error TLS, y está prohibido guardar la huella que el propio socket anuncia antes de estar autenticado.
+- Token en el fuente o en `appsettings.json`. Control: prohibido. `appsettings.json` del agente hoy solo tiene niveles de registro; debe seguir sin secretos. Las pruebas no fijan una credencial de producción.
+- Repetición con otro cuerpo o otro destino. Control: la clave única dispositivo + origen responde conflicto y no abre un trabajo nuevo.
+- Respuesta perdida que el cliente interpreta como fallo y reintenta. Control: el reintento de la misma clave, el mismo resumen y el mismo destino devuelve la fase ya guardada y no llama al spooler. Si la fase es `Uncertain`, se devuelve `Uncertain`.
+- Transferencia cortada. Control: sin commit no hay trabajo. El temporal se descarta al arrancar si no tiene fila.
+- Caída junto al spooler. Control: `Uncertain` y ninguna reimpresión automática. Igual que `JobRecovery`.
+- Otro proceso de la misma cuenta, cuando exista la tubería local. Control: ACL por SID más token efectivo más familia de paquete. Hasta la prueba de concepto, la tubería no se implementa. El Incremento 1 no la necesita: el PDF entra por TLS.
+- Lectura del `LocalState` ajeno como atajo. Control: no es el diseño. El repositorio no demuestra esa lectura. No se escribe código que la dé por hecha.
+- Recorrido de rutas. Control: el cliente no elige la ruta local. El agente asigna el archivo bajo su raíz. Se reutilizan `JobIdRules` y la comprobación de prefijo de `FileSystemJobFileStore` y de `FileJobRecordStore.PathFor` (rechazo de `..`, de separadores y de un resultado fuera de la raíz).
+- Documento enorme o muchos envíos. Control: topes de contrato, no mediciones de una impresora. El código actual no tiene tope de tamaño: `JobCaptureStore` copia hasta que el flujo termina. El receptor nuevo tiene que dejar de escribir al pasar el tope y no confirmar la clave.
+- PDF o OXPS malicioso. Control: no se añade un analizador nuevo. Lo que no sea `application/pdf` no llega a `PdfDocumentPreparer` ni a PDFium. El OXPS no entra al motor PDF. No se registra el cuerpo. No se afirma que PDFium o `Windows.Data.Pdf` sean un aislamiento: el riesgo residual es el de esas bibliotecas, ya usadas por Desktop.
+- Registro que guarda el documento o el secreto. Control: la auditoría lista identificadores, destino, tamaños, estados y el resultado de la autenticación. No lista el código de un solo uso, la credencial, la clave privada, el XML del ticket ni los bytes del documento.
+- Falsificar papel. Control: la confirmación física sigue siendo una nota escrita por quien ve la hoja, solo después de `SubmittedToSpooler`. Los textos de `HomeBanner` y de la página de trabajos se mantienen.
+
+## Certificado del anfitrión
+
+El agente genera un certificado autofirmado en el equipo anfitrión. La clave privada no sale de esa cuenta. El repositorio no contiene todavía ese generador: el contrato de abajo es el que el Incremento 1 tiene que cumplir.
+
+El cliente no acepta como auténtica una huella, ni una clave pública, que haya llegado solo desde un servidor que aún no está autenticado. Eso incluye el certificado presentado en el primer handshake y cualquier mensaje previo del receptor. La huella que vale es la que quien opera lee en el equipo anfitrión y escribe en el cliente por ese otro canal.
+
+Sobre el certificado presentado, todas estas comprobaciones tienen que cumplirse. Fallar una rechaza la conexión:
+
+- Vigencia. `NotBefore` ya pasó y `NotAfter` no ha pasado, en UTC. No hay margen que acepte un certificado caducado o todavía no válido.
+- Uso. El uso de clave permite firma digital y cifrado de clave, y el uso extendido incluye autenticación de servidor (`1.3.6.1.5.5.7.3.1`). Si el uso extendido falta, o trae otro uso, se rechaza. No se interpreta la ausencia como «sirve para todo».
+- Identidad esperada. El nombre que quien opera vio junto a la huella, en el mismo canal independiente, coincide con el nombre del sujeto o con un nombre alternativo del certificado, y con el nombre al que el cliente abre la conexión. Una huella correcta con otro nombre se rechaza. Un nombre correcto con otra huella se rechaza.
+- Huella ya verificada. La huella SHA-256 de la clave pública, o del certificado completo si fue eso lo que se mostró en el anfitrión, es igual a la que quedó escrita en el cliente antes de confiar en el socket. El código de un solo uso solo se acepta si el agente lo guardó ligado a esa misma huella.
+
+El certificado es autofirmado porque este repositorio no tiene una CA de la LAN. El error de cadena «raíz no confiable» de ese certificado concreto puede acompañar a un acierto solo cuando vigencia, uso, identidad y huella ya coincidieron. Cualquier otro error TLS —nombre distinto, caducado, uso incorrecto, revocación, error de protocolo, cadena distinta— hace que la validación devuelva falso. No existe una rama que ignore el conjunto de errores y devuelva verdadero. No se desactiva la validación de la plataforma para «dejar pasar» el autofirmado.
+
+El certificado no se copia al repositorio ni a `local-certs` de la POC de firma del MSIX. Ese certificado (`docs/installation.md`, `CN=Neobash Print Bridge POC`) firma el paquete. No autentica la LAN. Son materiales distintos.
+
+## Emparejamiento
+
+1. El agente, en la sesión interactiva, genera el certificado y un código de un solo uso ligado a su huella. Muestra en su salida local, en el mismo equipo, el código, la huella y el nombre esperado. No envía esa huella como dato de confianza. No la escribe en el registro de trabajos.
+2. Quien opera lee esos tres datos en el anfitrión y los escribe en el cliente. Ese es el canal independiente: la pantalla o la salida del proceso en el equipo anfitrión, no la conexión que se está autenticando.
+3. El cliente abre TLS usando el nombre que acaba de registrar. Aplica las comprobaciones de la sección anterior. El agente solo entonces consume el código, si la huella presentada es la ligada al código, y crea la credencial del dispositivo y el permiso sobre el destino publicado.
+4. El código queda gastado. Un segundo uso falla. Un código caducado falla. Un código presentado con otra clave falla.
+5. A partir de ahí cada envío usa TLS y esa credencial, y vuelve a exigir vigencia, uso, identidad y la misma huella.
+
+La ventana que hará estos pasos visibles es del Incremento 4. Un banco de pruebas del Incremento 1 puede introducir el código y la huella sin esa ventana. No puede tomar la huella del servidor, ni saltarse el código, ni saltarse el permiso.
+
+## Renovación del certificado
+
+El certificado del anfitrión tiene caducidad. Sustituirlo exige uno de estos caminos:
+
+- un código nuevo, ligado a la huella nueva, mostrado otra vez solo en el anfitrión y escrito otra vez en el cliente por el canal independiente;
+- o una renovación dentro de una sesión que ya autenticó el certificado anterior, todavía vigente. La huella nueva se muestra en el anfitrión y quien opera la confirma antes de que el cliente reemplace la guardada. La sesión vieja no sirve si el certificado ya caducó.
+
+Un certificado caducado no autoriza su reemplazo. Un cambio de huella anunciado por una conexión que no pasó las comprobaciones se ignora. El cliente no actualiza la huella porque el handshake falló o porque el servidor envió otra.
+
+La credencial de dispositivo se rota con el mismo criterio: la anterior deja de valer cuando la nueva queda confirmada. No conviven dos credenciales válidas para el mismo dispositivo.
+
+## Dónde viven las credenciales
+
+Recomendación: Credential Manager de la cuenta interactiva, tanto en el cliente como en el anfitrión. La base SQLite guarda el nombre del destino de la credencial y la huella del certificado.
+
+Alternativa, si la prueba no puede usar Credential Manager: blob cifrado con DPAPI `CurrentUser`, en una ruta del agente distinta de la carpeta de documentos, con ACL de esa cuenta. No `LocalMachine`, porque el MVP no es un servicio.
+
+Ni el código ni el JSON de un trabajo contienen el secreto. Desktop no recibe una copia «para mostrarla» en `preferences.json`.
+
+El repositorio no llama hoy a Credential Manager ni a DPAPI. Elegir uno es parte del Incremento 1, no una observación.
+
+## Dónde se publica un destino
+
+La fuente de verdad de los destinos LAN es únicamente SQLite del agente. Quien administra el equipo anfitrión registra el destino físico en una configuración local de ese proceso, fuera de `%LOCALAPPDATA%\Neobash\PrintBridge\Desktop`. El agente copia ese registro a la tabla y el receptor no vuelve a leer el archivo de registro: consulta la tabla. No abre `destinations.json` y no lo comparte con la ventana.
+
+El cliente recibe identificadores y nombres visibles de destinos publicados y concedidos. Al enviar, manda el identificador. Si la petición trae un nombre de cola, o un identificador que no está publicado para ese dispositivo, se rechaza antes de crear el temporal.
+
+## Revocación
+
+Quien opera el anfitrión revoca un dispositivo borrando o marcando su fila y eliminando la credencial. La petición siguiente falla la autorización aunque el certificado del anfitrión siga vigente. No hay periodo de gracia anónimo. No hay lista de revocación pública: la tabla del agente es la autoridad, porque el emparejamiento también fue local.
+
+Revocar no borra el historial de trabajos ya aceptados. Esos siguen en su fase, incluido `Uncertain`, para no ocultar un posible envío al spooler.
+
+## Tamaño y frecuencia
+
+Topes de contrato para el Incremento 1, elegidos para poder probarlos, no medidos en una impresora de este repositorio:
+
+- Cuerpo máximo aceptado: 32 MiB. Al superarlos se corta la lectura, se borra el temporal y la respuesta es rechazo. No hay fila.
+- Una transferencia en curso por dispositivo.
+- Como máximo 30 trabajos aceptados por dispositivo en 10 minutos. El exceso se rechaza sin crear clave.
+
+`PageLayoutCalculator.MaxRasterPixels` (48 000 000) es un tope de píxeles del PDF ya aceptado. No sustituye al tope de bytes de la red.
+
+La captura actual de la tarea no aplica estos topes. No se le cambian en el Incremento 1: el límite nuevo es del receptor del agente.
+
+## Recorrido de rutas y nombres
+
+`JobIdRules.EnsureSafe` rechaza vacío, longitud mayor de 80, `..`, caracteres inválidos y un inicio que no sea letra o dígito ASCII. `FileSystemJobFileStore` y `FileJobRecordStore.PathFor` comprueban que la ruta final siga bajo la raíz.
+
+El identificador de origen que llega por la red pasa por la misma regla antes de usarse en un nombre de archivo. Un destino es una clave de la tabla de permisos, no un fragmento de ruta. Está prohibido concatenar un texto del cliente con `Path.Combine` hacia el perfil o hacia el paquete.
+
+## Documentos maliciosos
+
+- Tipo distinto de `application/pdf`: rechazo de transporte, sin `TryBegin` y sin PDFium. Es el mismo criterio que `PrintDispatcher`, adelantado al receptor para no crear un trabajo.
+- PDF que el preparador o el spooler no pueden abrir: `Failed` si el envío al spooler no empezó, con el mensaje de la excepción ya existente. No se reintenta solo.
+- OXPS en el receptor del Incremento 1: rechazo. No se transforma.
+- No se ejecuta un conversor externo ni se descomprime el OXPS «para mirar». La validación estructural sigue desactivada (`OpenXpsLimits`).
+
+## Retención
+
+El Incremento 1 no instala un barrido automático.
+
+- La fila del trabajo se conserva, incluida la fase y la nota física si existe.
+- El cuerpo de un trabajo `Uncertain` se conserva. Borrarlo escondería el único archivo asociado a un envío que quizá llegó al spooler.
+- Borrar cuerpos de trabajos `SubmittedToSpooler` o `Failed` queda para una política posterior, explícita. No forma parte de la autorización del Incremento 1.
+- Los JSON históricos de Desktop no se purgan ni se migran aquí.
+
+## Auditoría
+
+Eventos mínimos del agente, en texto o en una tabla de la misma base, sin el documento:
+
+- emparejamiento aceptado o rechazado, sin el código;
+- autenticación aceptada o rechazada, con identificador de dispositivo;
+- rechazo por destino, tamaño, tipo o frecuencia;
+- conflicto de idempotencia, con la clave y sin el cuerpo;
+- transición de fase del trabajo;
+- arranque que pasa filas a `Uncertain`, con el recuento.
+
+`FileDiagnosticLog` hoy escribe mensajes libres, incluidos textos de excepción. El agente nuevo no debe volcar ahí la excepción si el mensaje puede incluir una ruta elegida por el cliente o un fragmento del documento. Puede registrar el tipo de fallo y el identificador.
+
+Los registros actuales de la tarea (`task.log`) y de Desktop (`diagnostic.log`) no se convierten en auditoría de red. Siguen sirviendo a su proceso.
+
+## Firewall, solo como nota operativa
+
+Cuando alguien vaya a probar dos equipos, la regla que tendría que crear a mano en el anfitrión es: entrada TCP, perfil privado, puerto elegido por la configuración local del agente, programa del agente, sin perfil público y sin «cualquier programa».
+
+Este repositorio no incluye script, manifiesto de firewall ni instrucción ejecutable que la cree. El Incremento 1 tampoco debe añadirla por su cuenta. Si el puerto no está abierto, la prueba se detiene y se pide la regla; no se abre el perfil público para compensar.
