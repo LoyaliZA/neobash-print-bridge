@@ -31,7 +31,7 @@ public sealed class AgentConfig
         string.IsNullOrWhiteSpace(HostName) ? Environment.MachineName : HostName.Trim();
 
     public IPAddress ResolveListenAddress() =>
-        string.IsNullOrWhiteSpace(ListenAddress) ? IPAddress.Any : IPAddress.Parse(ListenAddress.Trim());
+        string.IsNullOrWhiteSpace(ListenAddress) ? IPAddress.Loopback : IPAddress.Parse(ListenAddress.Trim());
 }
 
 public sealed record PublishedDestination(string Id, string DisplayName, string QueueName, string PaperName);
