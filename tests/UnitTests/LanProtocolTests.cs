@@ -315,7 +315,7 @@ public sealed class LanProtocolTests
         var paired = await client.PairAsync(code, "Cliente", null, CancellationToken.None);
         Assert.False(string.IsNullOrWhiteSpace(paired.DeviceId));
         Assert.DoesNotContain(code, fixture.Session.Database.ReadAuditText(), StringComparison.Ordinal);
-        Assert.True(File.ReadAllBytes(fixture.Session.Database.DatabasePath).AsSpan().IndexOf(Encoding.UTF8.GetBytes(paired.Credential!)) < 0);
+        Assert.True(ReadShared(fixture.Session.Database.DatabasePath).AsSpan().IndexOf(Encoding.UTF8.GetBytes(paired.Credential!)) < 0);
         trust.DeviceId = paired.DeviceId!;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -377,7 +377,7 @@ public sealed class LanProtocolTests
         }
 
         var store = CurrentUserSecretStore.Create(directory);
-        Assert.True(store is CredentialManagerSecretStore || store is DpapiSecretStore);
+        Assert.True(store is WindowsSecretStore || store is DpapiSecretStore);
     }
 
     [Fact]
@@ -388,6 +388,108 @@ public sealed class LanProtocolTests
         var code = await ClientConsole.RunAsync(["pair", "--host", "localhost", "--port", "9", "--code", "ABCDE"], TextWriter.Null, error, new MemorySecretStore(), root);
         Assert.Equal(2, code);
         Assert.Contains("huella", error.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Revocation_during_body_blocks_new_commit_but_preserves_an_accepted_replay()
+    {
+        using var fixture = Fixture.Open();
+        var device = fixture.Pair();
+        var accepted = await fixture.Send(device, "already", Pdf());
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var body = new PausedBody(Pdf(), started, release);
+        var pending = fixture.Session.Intake.AcceptAsync(device,
+            new JobSubmission("revoked-upload", "mostrador", "application/pdf", null, body.Length), body, CancellationToken.None);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        using (var administrativeDatabase = new AgentDatabase(fixture.Root))
+            Assert.True(new PairingService(administrativeDatabase, fixture.Secrets).Revoke(device.Id));
+        release.SetResult();
+        Assert.Equal(TransferState.Rechazada, (await pending).Transfer);
+        Assert.Null(fixture.Session.Database.FindIdempotency(device.Id, "revoked-upload"));
+        Assert.Single(fixture.Session.Database.ListIds());
+        Assert.Empty(Directory.EnumerateFiles(fixture.Session.Database.IncomingDirectory));
+        Assert.Single(Directory.EnumerateFiles(fixture.Session.Database.DocumentsDirectory));
+        // A stale in-flight retry may return an earlier acceptance, but never dispatch again.
+        var replay = await fixture.Send(device, "already", Pdf());
+        Assert.Equal(accepted.JobId, replay.JobId);
+        Assert.Equal(TransferState.Aceptada, replay.Transfer);
+        Assert.Equal(1, fixture.Spooler.Calls);
+    }
+
+    [Fact]
+    public async Task Second_listener_fails_before_recovery_and_missing_certificate_never_replaces_identity()
+    {
+        using var fixture = Fixture.Open();
+        var device = fixture.Pair();
+        var path = fixture.Session.Database.NewTempPath();
+        File.WriteAllText(path, "active");
+        var config = new AgentConfig { DataDirectory = fixture.Root, HostName = "localhost" };
+        Assert.Throws<InvalidOperationException>(() => LanSession.Open(config, fixture.Secrets, new FixedCatalog("Cola fisica", "A4")));
+        Assert.Equal("active", File.ReadAllText(path));
+        using var admin = LanSession.Open(config, fixture.Secrets, new FixedCatalog("Cola fisica", "A4"), recover: false);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => admin.ListenAsync(IPAddress.Loopback, 0, CancellationToken.None));
+        fixture.Secrets.Delete(PairingService.HostSecretName);
+        Assert.Throws<InvalidOperationException>(() => admin.Pairing.LoadOrCreateHost("localhost"));
+        Assert.NotNull(admin.Database.FindDevice(device.Id));
+        Assert.True(IPAddress.IsLoopback(new AgentConfig().ResolveListenAddress()));
+    }
+
+    [Fact]
+    public async Task Client_commands_cover_pair_send_status_destinations_and_renew()
+    {
+        using var fixture = Fixture.Open();
+        await using var host = await fixture.Session.ListenAsync(IPAddress.Loopback, 0, CancellationToken.None);
+        var root = Path.Combine(fixture.Root, "client");
+        var secrets = new MemorySecretStore();
+        var output = new StringWriter();
+        var error = new StringWriter();
+        Task<int> Run(params string[] args) => ClientConsole.RunAsync(args, output, error, secrets, root);
+        Assert.Equal(0, await Run("pair", "--host", "localhost", "--port", host.BaseUri.Port.ToString(),
+            "--fingerprint", fixture.Session.Fingerprint, "--code", fixture.Session.IssuePairingCode()));
+        var trustPath = Path.Combine(root, "client-trust.json");
+        var savedTrust = File.ReadAllText(trustPath);
+        Assert.Equal(1, await Run("pair", "--host", "localhost", "--port", host.BaseUri.Port.ToString(),
+            "--fingerprint", fixture.Session.Fingerprint, "--code", "INVALID"));
+        Assert.Equal(savedTrust, File.ReadAllText(trustPath));
+        var path = Path.Combine(root, "input.pdf");
+        File.WriteAllBytes(path, Pdf());
+        Assert.Equal(0, await Run("send", "--destination", "mostrador", "--source", "cli", "--file", path));
+        Assert.Equal(0, await Run("send", "--destination", "mostrador", "--source", "cli", "--pdf", path));
+        Assert.Equal(1, fixture.Spooler.Calls);
+        Assert.Equal(0, await Run("status", "--source", "cli"));
+        Assert.Equal(1, await Run("status", "--source", "missing"));
+        Assert.Equal(0, await Run("destinations"));
+        var next = fixture.Session.Pairing.StageRenewal("localhost");
+        Assert.Equal(0, await Run("renew", "--fingerprint", HostCertificateTrust.Fingerprint(next.Certificate)));
+        Assert.Equal(0, await Run("status", "--source", "cli"));
+        Assert.Equal(2, await Run("send", "--destination", "mostrador", "--source", "cli", "--file", path, "--pdf", "other.pdf"));
+        fixture.Session.Pairing.Revoke(ClientTrust.Load(root).DeviceId);
+        Assert.Equal(1, await Run("status", "--source", "cli"));
+        Assert.Equal(2, await Run("destinations"));
+    }
+
+    private sealed class PausedBody(byte[] bytes, TaskCompletionSource started, TaskCompletionSource release) : MemoryStream(bytes)
+    {
+        private bool _paused;
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_paused)
+            {
+                _paused = true;
+                started.SetResult();
+                await release.Task.WaitAsync(cancellationToken);
+            }
+            return await base.ReadAsync(buffer, cancellationToken);
+        }
+    }
+
+    private static byte[] ReadShared(string path)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var bytes = new MemoryStream();
+        file.CopyTo(bytes);
+        return bytes.ToArray();
     }
 
     private static X509Certificate2 Issue(Action<CertificateRequest> extend, string hostName, DateTimeOffset now)
