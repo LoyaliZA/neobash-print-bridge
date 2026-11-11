@@ -23,7 +23,6 @@ public static class ClientConsole
                 case "pair":
                     Require(options, "host", "port", "fingerprint", "code");
                     trust.RememberOperatorPin(options["host"], int.Parse(options["port"]), options["fingerprint"]);
-                    trust.Save(dataDirectory);
                     using (var client = new LanClient(trust))
                     {
                         var paired = await client.PairAsync(options["code"], options.GetValueOrDefault("name"), trust.DeviceId, cancellationToken).ConfigureAwait(false);
@@ -43,10 +42,16 @@ public static class ClientConsole
 
                     return 0;
                 case "send":
-                    Require(options, "destination", "source", "pdf");
+                    if (options.TryGetValue("pdf", out var legacyPdf))
+                    {
+                        if (options.TryGetValue("file", out var file) && file != legacyPdf)
+                            throw new ArgumentException("--file y --pdf deben indicar el mismo archivo.");
+                        options["file"] = legacyPdf;
+                    }
+                    Require(options, "destination", "source", "file");
                     return await WithClient(trust, secrets, dataDirectory, output, error, async (client, credential) =>
                     {
-                        await using var pdf = File.OpenRead(options["pdf"]);
+                        await using var pdf = File.OpenRead(options["file"]);
                         var sent = await client.SendAsync(options["destination"], options["source"], pdf, credential, cancellationToken).ConfigureAwait(false);
                         output.WriteLine(sent.Transfer + " " + sent.Phase);
                         output.WriteLine(sent.Detail);
@@ -59,7 +64,7 @@ public static class ClientConsole
                         var status = await client.StatusAsync(options["source"], credential, cancellationToken).ConfigureAwait(false);
                         output.WriteLine(status.Transfer + " " + status.Phase);
                         output.WriteLine(status.Detail);
-                        return 0;
+                        return status.Transfer == nameof(TransferState.Aceptada) ? 0 : 1;
                     }).ConfigureAwait(false);
                 case "destinations":
                     return await WithClient(trust, secrets, dataDirectory, output, error, async (client, credential) =>
@@ -89,7 +94,7 @@ public static class ClientConsole
                     return 2;
             }
         }
-        catch (ArgumentException exception)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or IOException or HttpRequestException or InvalidOperationException)
         {
             error.WriteLine(exception.Message);
             return 2;

@@ -130,6 +130,7 @@ public sealed class LanClient : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, "v1/destinations");
         AddAuth(request, credential);
         var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
