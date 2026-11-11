@@ -14,6 +14,22 @@
                 </StackPanel>
             </Border>
 
+            <Border x:Name="SetupCard" Style="{StaticResource NpbCard}" Visibility="Collapsed">
+                <StackPanel Spacing="12">
+                    <TextBlock x:Name="SetupTitle" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="SetupMessage" TextWrapping="Wrap" />
+                    <ComboBox x:Name="SetupQueue" Header="Impresora" PlaceholderText="Elige una cola" HorizontalAlignment="Stretch" SelectionChanged="OnSetupQueue" />
+                    <ComboBox x:Name="SetupPaper" Header="Papel anunciado por el controlador" PlaceholderText="Elige un papel anunciado" HorizontalAlignment="Stretch" SelectionChanged="OnSetupPaper" />
+                    <TextBlock x:Name="SetupHint" Text="Solo aparecen los papeles que anuncia el controlador de esa cola. Un tamaño que no esté en la lista no se agrega." TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="SetupSave" Content="Guardar impresora" Style="{StaticResource NpbPrimaryButton}" Click="OnSaveSetup" />
+                        <Button x:Name="SetupChange" Content="Cambiar" Style="{StaticResource NpbQuietButton}" Click="OnChangeSetup" />
+                        <Button x:Name="SetupCancel" Content="Cancelar" Style="{StaticResource NpbQuietButton}" Click="OnCancelSetup" />
+                    </StackPanel>
+                    <TextBlock x:Name="SetupFeedback" TextWrapping="Wrap" Foreground="{StaticResource NpbMutedBrush}" />
+                </StackPanel>
+            </Border>
+
             <Grid>
                 <TextBlock Text="Mis impresoras" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Content="Actualizar" Style="{StaticResource NpbQuietButton}" HorizontalAlignment="Right" Click="OnRefresh" />

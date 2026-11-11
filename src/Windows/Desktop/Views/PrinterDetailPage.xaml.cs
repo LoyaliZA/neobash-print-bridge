@@ -223,7 +223,8 @@ public sealed partial class PrinterDetailPage : Page, ISessionPage
             return;
         }
 
-        var destination = new PrintDestination("dest-" + Guid.NewGuid().ToString("N"), name.Text.Trim(), queue.QueueName, options.PaperName, options);
+        var driver = string.IsNullOrWhiteSpace(queue.DriverName) ? null : queue.DriverName;
+        var destination = new PrintDestination("dest-" + Guid.NewGuid().ToString("N"), name.Text.Trim(), queue.QueueName, options.PaperName, options, driver);
         if (string.IsNullOrWhiteSpace(destination.DisplayName))
         {
             Message.Text = "El destino necesita un nombre.";

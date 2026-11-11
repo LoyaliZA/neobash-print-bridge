@@ -60,7 +60,10 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
         _updatingDestinations = false;
         var selected = SelectedDestination;
         _destinationId = desired;
-        DestinationText.Text = selected is null ? "Selecciona un destino guardado en Mis impresoras." : $"{selected.QueueName} · {selected.PaperName}";
+        var setup = AppServices.Window.Session.Setup;
+        DestinationText.Text = setup.AsksForSelection
+            ? setup.Message
+            : selected is null ? "Selecciona un destino guardado en Mis impresoras." : $"{selected.QueueName} · {selected.PaperName}";
         if (_active && selected != previous) ApplyDestination();
     }
 
@@ -74,7 +77,10 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
     private void ApplyDestination()
     {
         var active = SelectedDestination;
-        DestinationText.Text = active is null ? "Selecciona un destino guardado en Mis impresoras." : $"{active.QueueName} · {active.PaperName}";
+        var setup = AppServices.Window.Session.Setup;
+        DestinationText.Text = setup.AsksForSelection
+            ? setup.Message
+            : active is null ? "Selecciona un destino guardado en Mis impresoras." : $"{active.QueueName} · {active.PaperName}";
         if (active is not null)
         {
             var options = active.Defaults ?? PrintOptions.ForPaper(active.PaperName ?? "");
@@ -238,6 +244,13 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
 
     private async void OnPrint(object sender, RoutedEventArgs e)
     {
+        var setup = AppServices.Window.Session.Setup;
+        if (setup.AsksForSelection)
+        {
+            ResultText.Text = setup.Message;
+            return;
+        }
+
         var destination = SelectedDestination;
         if (destination is null)
         {
