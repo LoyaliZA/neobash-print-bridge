@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\Neobash.PrintBridge.Core.csproj" />
+    <ProjectReference Include="..\PrintEngine\Neobash.PrintBridge.PrintEngine.csproj" />
     <Content Include="..\..\..\docs\third-party\pdfium\**\*">
       <Link>third-party\pdfium\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

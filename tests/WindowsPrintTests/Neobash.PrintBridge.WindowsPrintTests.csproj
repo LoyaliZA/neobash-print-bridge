@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -13,9 +14,8 @@
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
     <PackageReference Include="bblanchon.PDFium.Win32" Version="157.0.8100" />
     <ProjectReference Include="..\..\src\Core\Neobash.PrintBridge.Core.csproj" />
-    <!-- Exercise the production native boundary without launching WinUI or a spooler. -->
-    <Compile Include="..\..\src\Windows\Desktop\Printing\PdfiumPrintSession.cs" Link="PdfiumPrintSession.cs" />
-    <Compile Include="..\..\src\Windows\Desktop\Printing\StaQueue.cs" Link="StaQueue.cs" />
+    <ProjectReference Include="..\..\src\Windows\PrintEngine\Neobash.PrintBridge.PrintEngine.csproj" />
+    <!-- Preview stays in Desktop. The native session and the STA queue come from the shared library. -->
     <Compile Include="..\..\src\Windows\Desktop\Printing\PdfPagePreview.cs" Link="PdfPagePreview.cs" />
     <Compile Include="..\..\src\Windows\Desktop\Printing\PreviewPaperReader.cs" Link="PreviewPaperReader.cs" />
     <Using Include="Xunit" />
