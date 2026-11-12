@@ -100,3 +100,44 @@ Ver `C1-portable.md` para requisitos, reproducción, CI, descarga y límites de 
 La prueba en Windows 11 limpio, sin SDK/runtime externo y sin Internet sigue pendiente
 hasta disponer de ese entorno. Este equipo de desarrollo sí tiene SDK y runtimes instalados.
 El ZIP no tiene firma pública; no se certifica compatibilidad con Smart App Control.
+
+## Paquete extraído y GitHub Actions
+
+El script produjo `artifacts/NeobashPrintBridge-C1-win-x64-portable.zip` (aproximadamente
+92 MiB). Se extrajo el árbol completo en
+`%TEMP%\NPB-C1-portable-5f033c2c2f524107832e3712d4b5b6de` y se lanzó el EXE con esa
+carpeta como directorio de trabajo, `DOTNET_ROOT` apuntando a una carpeta inexistente y
+`DOTNET_MULTILEVEL_LOOKUP=0`. La ejecución aislada no mantuvo el proceso; al ejecutarlo
+con el perfil Windows se abrió la ventana y se leyó el catálogo real. La traza de host
+y la lista de módulos confirman `coreclr.dll`, `hostfxr.dll`, `hostpolicy.dll`,
+`Microsoft.WindowsAppRuntime.dll` y `Microsoft.UI.Xaml.dll` desde la carpeta extraída;
+no aparecen módulos desde el repositorio ni `Program Files` en la captura.
+
+Se comprobó Inicio con POS80 y su configuración persistida, los cuatro papeles
+anunciados, la apertura y cancelación del formulario de configuración y la página
+Imprimir con el destino guardado. No se guardaron cambios de preferencias.
+El selector de PDF abrió, pero la automatización no pudo controlar su ventana
+`PickerHost.exe`: rechazó el clic por pertenecer a otro proceso incluso tras refrescar
+y activar la ventana. La vista previa del paquete queda pendiente de comprobación
+visual; las pruebas nativas de vista previa sí pasaron. Se cerró el proceso de prueba
+sin enviar trabajos. Evidencias locales: `artifacts/c1-portable-validation/`.
+
+El MSIX existente se reconstruyó **sin firmar ni instalar** y su caso binario pasó
+1/1 sobre ese paquete recién generado (`c1-msix-fresh.trx`). La compilación avisó de
+`mspdbcmf.exe` ausente (símbolos) y de `maxVersionTested` en el manifiesto previo;
+no impidieron generar el paquete ni validar el contrato. No se cambió ese componente.
+
+GitHub Actions ejecutó el workflow `C1 Windows` sobre `c98d5d7b492c293f77597552405c5ebd13786fa3`:
+[ejecución 43253322925](https://github.com/LoyaliZA/neobash-print-bridge/actions/runs/43253322925).
+Ambos jobs terminaron **success**: compilación WinUI Release x64, suite unitaria sin
+el contrato MSIX en el job Desktop, 8 WindowsPrintTests, publicación y carga del ZIP;
+el contrato MSIX corre y pasa en su propio job, sin `continue-on-error`.
+El artefacto descargable `NeobashPrintBridge-C1-win-x64-portable`, ID `13961491174`,
+ocupa 95,628,396 bytes en el contenedor de artefactos de GitHub. Incluye el ZIP solicitado.
+Los binarios de CI y locales pueden diferir por las versiones de CRT disponibles;
+`build-info.json` identifica las usadas y no se promete reproducibilidad bit a bit.
+
+Pendiente: entorno Windows 11 limpio y desconectado, guardado de configuración en ese
+entorno y vista previa visual del ZIP. No se dispone aquí de una VM limpia. El equipo
+actual tiene .NET/Visual Studio y conexión; no se afirma haberlos desinstalado o cortado.
+La impresión física confirmada por el usuario no reemplaza estas comprobaciones.
