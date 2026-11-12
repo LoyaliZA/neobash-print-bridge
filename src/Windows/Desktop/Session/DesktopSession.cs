@@ -108,7 +108,29 @@ public sealed class DesktopSession
     public LocalSetupAssessment Setup =>
         Assess(_catalogWaiting || (!_namesReady && _host.Catalog.RefreshError is null));
 
+    public LocalSetupAssessment AssessDestination(PrintDestination destination) =>
+        LocalSetup.Evaluate(new DesktopPreferences(destination.Id, AppearancePreference.Light),
+            [destination], _host.Catalog.List(), _catalogWaiting || !_namesReady, CatalogFailed);
+
+    public bool CanSaveLocalPrinter => _namesReady && !_catalogWaiting && !CatalogFailed && !_printing
+        && SelectedQueue() is { Detail: QueueDetail.Ready } queue
+        && LocalSetup.AnnouncedPapers(queue).Contains(_selectedPaper, StringComparer.OrdinalIgnoreCase);
+
+    public void CancelLocalSelection()
+    {
+        if (_namesReady && !_catalogWaiting && !CatalogFailed) ApplyNames();
+    }
+
     public string? SaveLocalPrinter(string? queueName, string? paperName)
+    {
+        try { return SaveLocalPrinterCore(queueName, paperName); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return "No se guardó la impresora. " + exception.Message;
+        }
+    }
+
+    private string? SaveLocalPrinterCore(string? queueName, string? paperName)
     {
         if (_preferences is null)
         {
@@ -118,6 +140,11 @@ public sealed class DesktopSession
         if (string.IsNullOrWhiteSpace(queueName) || string.IsNullOrWhiteSpace(paperName))
         {
             return "Elige una impresora y un papel anunciado por su controlador.";
+        }
+
+        if (_catalogWaiting || !_namesReady || CatalogFailed || _printing)
+        {
+            return "Espera a que termine la operación y se lea el catálogo antes de guardar.";
         }
 
         var queue = _host.Catalog.List().FirstOrDefault(item => string.Equals(item.QueueName, queueName, StringComparison.OrdinalIgnoreCase));
@@ -132,9 +159,27 @@ public sealed class DesktopSession
             return built.Error ?? "No se guardó la impresora.";
         }
 
-        _host.Destinations.Save(built.Destination);
         var preferences = _preferences.Load();
-        _preferences.Save(preferences with { ActiveDestinationId = built.Destination.Id });
+        var previous = _host.Destinations.Find(built.Destination.Id);
+        _host.Destinations.Save(built.Destination);
+        try
+        {
+            _preferences.Save(preferences with { ActiveDestinationId = built.Destination.Id });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                if (previous is null) _host.Destinations.Remove(built.Destination.Id);
+                else _host.Destinations.Save(previous);
+            }
+            catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
+            {
+                return "El guardado quedó incompleto y no se pudo restaurar el destino. Revisa la configuración antes de imprimir. "
+                    + exception.Message + " " + rollback.Message;
+            }
+            throw;
+        }
         _selectedQueue = built.Destination.QueueName;
         FillPapers(queue);
         _selectedPaper = built.Destination.PaperName;
@@ -244,6 +289,8 @@ public sealed class DesktopSession
     {
         _selectionExplicit = true;
         ++_detailToken;
+        _papers.Clear();
+        _selectedPaper = null;
         _selectedQueue = queueName;
         var queue = SelectedQueue();
         if (queue is null)
@@ -269,7 +316,7 @@ public sealed class DesktopSession
 
     public void SelectPaper(string? paper)
     {
-        _selectedPaper = paper;
+        _selectedPaper = _papers.FirstOrDefault(item => string.Equals(item, paper, StringComparison.OrdinalIgnoreCase));
         UpdateCommands();
         Notify();
     }
@@ -340,7 +387,7 @@ public sealed class DesktopSession
                 _selectedPaper = null;
                 Status = AppendWarnings(setup.Message);
             }
-            else if (sameSaved && SavedQueueSelection.PaperStillAnnounced(read, saved!.PaperName) && setup.Kind == LocalSetupKind.Ready)
+            else if (sameSaved && !_selectionExplicit && SavedQueueSelection.PaperStillAnnounced(read, saved!.PaperName) && setup.Kind == LocalSetupKind.Ready)
             {
                 _selectedPaper = _papers.FirstOrDefault(paper => string.Equals(paper, saved.PaperName, StringComparison.OrdinalIgnoreCase));
                 Status = AppendWarnings(Describe(saved));

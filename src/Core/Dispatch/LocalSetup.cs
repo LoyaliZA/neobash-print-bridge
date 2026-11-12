@@ -177,7 +177,6 @@ public static class LocalSetup
         ArgumentNullException.ThrowIfNull(saved);
         ArgumentNullException.ThrowIfNull(queue);
         return !string.IsNullOrWhiteSpace(saved.DriverName)
-            && !string.IsNullOrWhiteSpace(queue.DriverName)
             && !string.Equals(saved.DriverName, queue.DriverName, StringComparison.OrdinalIgnoreCase);
     }
 

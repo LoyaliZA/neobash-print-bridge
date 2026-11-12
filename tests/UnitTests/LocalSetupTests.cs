@@ -224,6 +224,91 @@ public sealed class LocalSetupTests : IDisposable
         Assert.Equal("pref", new FilePreferenceStore(_root).Load().ActiveDestinationId);
     }
 
+    [Fact]
+    public async Task Switching_queues_clears_the_previous_paper_even_when_both_announce_it()
+    {
+        var probe = new Probe { Names = ["A", "B"] };
+        probe.Details["A"] = Queue("A", "Driver A", "Shared paper");
+        probe.Details["B"] = Queue("B", "Driver B", "Shared paper");
+        var session = Open(probe, new FilePreferenceStore(_root), new FileDestinationStore(_root));
+        await session.LoadNamesAsync();
+        session.SelectQueue("A");
+        await session.LoadDetailsAsync("A");
+        session.SelectPaper("Shared paper");
+        session.SelectQueue("B");
+        await session.LoadDetailsAsync("B");
+        Assert.Null(session.SelectedPaper);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Preference_write_failure_returns_an_error_and_restores_destinations(bool existing)
+    {
+        var probe = new Probe { Names = ["A"] };
+        probe.Details["A"] = Queue("A", "Driver A", "Old paper", "New paper");
+        var destinations = new FileDestinationStore(_root);
+        var old = new PrintDestination("old", "A", "A", "Old paper", PrintOptions.ForPaper("Old paper"), "Driver A");
+        if (existing) destinations.Save(old);
+        var preferences = new FailingPreferences(existing ? "old" : null);
+        var session = Open(probe, preferences, destinations);
+        await session.LoadNamesAsync();
+        session.SelectQueue("A");
+        await session.LoadDetailsAsync("A");
+        var error = session.SaveLocalPrinter("A", "New paper");
+        Assert.Contains("No se guardó", error, StringComparison.Ordinal);
+        Assert.Equal(existing ? "old" : null, preferences.Load().ActiveDestinationId);
+        if (existing) Assert.Equal(old, Assert.Single(destinations.List()));
+        else Assert.Empty(destinations.List());
+    }
+
+    [Fact]
+    public async Task Draft_paper_survives_notifications_and_cancel_restores_the_saved_selection()
+    {
+        var probe = new Probe { Names = ["A"] };
+        probe.Details["A"] = Queue("A", "Driver A", "Old paper", "New paper");
+        var preferences = new FilePreferenceStore(_root);
+        var destinations = new FileDestinationStore(_root);
+        var session = Open(probe, preferences, destinations);
+        await session.LoadNamesAsync();
+        session.SelectQueue("A");
+        await session.LoadDetailsAsync("A");
+        Assert.Null(session.SaveLocalPrinter("A", "Old paper"));
+        session.SelectPaper("New paper");
+        session.ApplyObservations(new Dictionary<string, QueueObservation>());
+        Assert.Equal("New paper", session.SelectedPaper);
+        Assert.True(session.CanSaveLocalPrinter);
+        Assert.Equal("Old paper", destinations.List().Single().PaperName);
+        session.CancelLocalSelection();
+        Assert.Equal("Old paper", session.SelectedPaper);
+    }
+
+    [Fact]
+    public async Task Selected_destination_is_assessed_independently_of_the_active_destination()
+    {
+        var probe = new Probe { Names = ["A", "B"] };
+        probe.Details["A"] = Queue("A", "Driver A", "Paper");
+        probe.Details["B"] = Queue("B", "Changed B", "Paper");
+        var preferences = new FilePreferenceStore(_root);
+        var destinations = new FileDestinationStore(_root);
+        var session = Open(probe, preferences, destinations);
+        await session.LoadNamesAsync();
+        session.SelectQueue("A");
+        await session.LoadDetailsAsync("A");
+        Assert.Null(session.SaveLocalPrinter("A", "Paper"));
+        var b = new PrintDestination("b", "B", "B", "Paper", PrintOptions.ForPaper("Paper"), "Old B");
+        destinations.Save(b);
+        await session.SessionHost().Catalog.ReadDetailsAsync("B");
+        Assert.Equal(LocalSetupKind.Ready, session.Setup.Kind);
+        Assert.Equal(LocalSetupKind.PrinterChanged, session.AssessDestination(b).Kind);
+    }
+
+    private sealed class FailingPreferences(string? active) : IPreferenceStore
+    {
+        public DesktopPreferences Load() => new(active, AppearancePreference.Light);
+        public void Save(DesktopPreferences preferences) => throw new IOException("Disk unavailable");
+    }
+
     private DesktopSession Open(Probe probe, IPreferenceStore preferences, IDestinationStore destinations) =>
         new(new DesktopHost(
             destinations,

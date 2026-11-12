@@ -66,9 +66,9 @@ public sealed partial class HomePage : Page, ISessionPage
         var selectedQueue = session.SelectedQueueName ?? setup.KeptQueueName;
         ReplaceItems(SetupQueue, names, selectedQueue);
         var papers = PapersFor(session, SetupQueue.SelectedItem as string);
-        var requestedPaper = session.SelectedPaper ?? SetupPaper.SelectedItem as string;
+        var requestedPaper = session.SelectedPaper;
         ReplaceItems(SetupPaper, papers, requestedPaper);
-        SetupSave.IsEnabled = SetupQueue.SelectedItem is string && SetupPaper.SelectedItem is string;
+        SetupSave.IsEnabled = session.CanSaveLocalPrinter;
     }
 
     private static string[] PapersFor(DesktopSession session, string? queueName)
@@ -131,8 +131,8 @@ public sealed partial class HomePage : Page, ISessionPage
             return;
         }
 
-        SetupSave.IsEnabled = SetupQueue.SelectedItem is string && SetupPaper.SelectedItem is string;
         SetupFeedback.Text = "";
+        AppServices.Window.Session.SelectPaper(SetupPaper.SelectedItem as string);
     }
 
     private void OnSaveSetup(object sender, RoutedEventArgs e)
@@ -158,6 +158,7 @@ public sealed partial class HomePage : Page, ISessionPage
     {
         _choosing = false;
         SetupFeedback.Text = "";
+        AppServices.Window.Session.CancelLocalSelection();
         Refresh();
     }
 
