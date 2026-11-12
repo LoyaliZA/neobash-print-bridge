@@ -50,8 +50,23 @@ public sealed class HomeViewModel : Bindable
         }
 
         var failed = session.CatalogFailed;
-        Title = HomeBanner.Title(session.CatalogWaiting, failed, active, activeQueue);
-        Subtitle = HomeBanner.Subtitle(session.CatalogWaiting, failed, active, activeQueue);
+        var setup = session.Setup;
+        var attention = setup.Kind is LocalSetupKind.NeedsFirstSetup
+            or LocalSetupKind.PrinterMissing
+            or LocalSetupKind.PrinterChanged
+            or LocalSetupKind.PaperNotAnnounced
+            or LocalSetupKind.OptionsNeedReview
+            or LocalSetupKind.CapabilitiesUnreadable;
+        if (attention && !string.IsNullOrWhiteSpace(setup.Title))
+        {
+            Title = setup.Title;
+            Subtitle = setup.Message;
+        }
+        else
+        {
+            Title = HomeBanner.Title(session.CatalogWaiting, failed, active, activeQueue);
+            Subtitle = HomeBanner.Subtitle(session.CatalogWaiting, failed, active, activeQueue);
+        }
         var cards = installed.Select(queue => Card(queue, DevicePresentation.Kind(queue, session.Observation(queue.QueueName)), session.Observation(queue.QueueName)))
             .OrderBy(card => card.SortOrder).ThenBy(card => card.QueueName, StringComparer.CurrentCultureIgnoreCase).ToArray();
         Replace(Physical, cards.Where(card => !card.IsVirtual && !card.IsSoftware));

@@ -51,6 +51,11 @@ public sealed class PrintDispatcher
             return new DispatchResult(JobPhase.Failed, "Esa cola es virtual y no puede ser destino físico.");
         }
 
+        if (LocalSetup.DriverChanged(destination, queue))
+        {
+            return new DispatchResult(JobPhase.Failed, "El controlador de la cola cambió. Confirma de nuevo la impresora y el papel antes de enviar.");
+        }
+
         var options = job.Options ?? destination.Defaults ?? PrintOptions.ForPaper(destination.PaperName ?? "");
         // Saved defaults cannot authorize clipping for a new job.
         options = options with { AllowClippingConfirmed = job.Options?.AllowClippingConfirmed == true };
