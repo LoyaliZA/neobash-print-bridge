@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Neobash.PrintBridge.Core.Dispatch;
 
 public sealed record PrintDestination(
@@ -5,4 +7,5 @@ public sealed record PrintDestination(
     string DisplayName,
     string QueueName,
     string? PaperName,
-    PrintOptions? Defaults = null);
+    PrintOptions? Defaults = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? DriverName = null);

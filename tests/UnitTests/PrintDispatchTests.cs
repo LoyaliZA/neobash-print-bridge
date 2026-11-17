@@ -33,6 +33,21 @@ public sealed class PrintDispatchTests
         Assert.Same(_preparer.Document, submission.Document);
     }
 
+    [Theory]
+    [InlineData("Replacement driver")]
+    [InlineData("")]
+    public async Task Changed_driver_is_rejected_before_preparing_or_submitting(string driver)
+    {
+        var destination = Destination("pos", "POS80 Printer", "Driver paper") with { DriverName = "POS80" };
+        _destinations.Save(destination);
+        _catalog.Queues.Add(Queue("POS80 Printer", driver, "Driver paper"));
+        var result = await _dispatcher.DispatchAsync(Job("changed-driver", "application/pdf", destination));
+        Assert.Equal(JobPhase.Failed, result.Phase);
+        Assert.Empty(_port.Submissions);
+        Assert.Empty(_preparer.Calls);
+        Assert.Null(_jobs.Find("changed-driver"));
+    }
+
     [Fact]
     public async Task Clipping_confirmation_is_requested_only_before_printing_starts()
     {

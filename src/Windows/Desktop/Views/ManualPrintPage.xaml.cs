@@ -60,7 +60,10 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
         _updatingDestinations = false;
         var selected = SelectedDestination;
         _destinationId = desired;
-        DestinationText.Text = selected is null ? "Selecciona un destino guardado en Mis impresoras." : $"{selected.QueueName} · {selected.PaperName}";
+        var setup = selected is null ? AppServices.Window.Session.Setup : AppServices.Window.Session.AssessDestination(selected);
+        DestinationText.Text = setup.Kind != LocalSetupKind.Ready
+            ? setup.Message
+            : selected is null ? "Selecciona un destino guardado en Mis impresoras." : $"{selected.QueueName} · {selected.PaperName}";
         if (_active && selected != previous) ApplyDestination();
     }
 
@@ -74,7 +77,10 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
     private void ApplyDestination()
     {
         var active = SelectedDestination;
-        DestinationText.Text = active is null ? "Selecciona un destino guardado en Mis impresoras." : $"{active.QueueName} · {active.PaperName}";
+        var setup = active is null ? AppServices.Window.Session.Setup : AppServices.Window.Session.AssessDestination(active);
+        DestinationText.Text = setup.Kind != LocalSetupKind.Ready
+            ? setup.Message
+            : active is null ? "Selecciona un destino guardado en Mis impresoras." : $"{active.QueueName} · {active.PaperName}";
         if (active is not null)
         {
             var options = active.Defaults ?? PrintOptions.ForPaper(active.PaperName ?? "");
@@ -242,6 +248,13 @@ public sealed partial class ManualPrintPage : Page, ISessionPage
         if (destination is null)
         {
             ResultText.Text = "Guarda un destino y márcalo como activo antes de imprimir.";
+            return;
+        }
+
+        var setup = AppServices.Window.Session.AssessDestination(destination);
+        if (setup.Kind != LocalSetupKind.Ready)
+        {
+            ResultText.Text = setup.Message;
             return;
         }
 

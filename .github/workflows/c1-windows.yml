@@ -1,0 +1,66 @@
+name: C1 Windows
+on:
+  pull_request:
+  push:
+    branches: [feature/c1-local-desktop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: Desktop, tests and portable ZIP
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.403'
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore src/Windows/Desktop/Neobash.PrintBridge.Desktop.csproj -p:Platform=x64 -r win-x64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet restore tests/UnitTests/Neobash.PrintBridge.Tests.csproj
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet restore tests/WindowsPrintTests/Neobash.PrintBridge.WindowsPrintTests.csproj
+          exit $LASTEXITCODE
+      - name: Build Desktop Release x64
+        run: dotnet build src/Windows/Desktop/Neobash.PrintBridge.Desktop.csproj -c Release -p:Platform=x64 -r win-x64 --no-restore
+      - name: Unit tests (MSIX binary contract has its own required job)
+        run: dotnet test tests/UnitTests/Neobash.PrintBridge.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName!~Packaged_manifest_resolves_the_printer_resource_and_registers_the_extension' --logger 'trx;LogFileName=c1-unit.trx'
+      - name: Windows native tests (no physical printer)
+        run: dotnet test tests/WindowsPrintTests/Neobash.PrintBridge.WindowsPrintTests.csproj -c Release --no-restore --logger 'trx;LogFileName=c1-windows.trx'
+      - name: Publish and archive self-contained Desktop
+        shell: pwsh
+        run: ./scripts/c1/Publish-Portable.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeobashPrintBridge-C1-win-x64-portable
+          path: artifacts/NeobashPrintBridge-C1-win-x64-portable.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c1-test-results
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: warn
+  msix-contract:
+    name: Existing MSIX binary contract (unsigned, no install)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.403'
+      - name: Build existing virtual printer MSIX without signing
+        run: dotnet build src/Windows/VirtualPrinter/Neobash.PrintBridge.VirtualPrinter.csproj -c Release -p:Platform=x64 -r win-x64 -p:AppxPackageSigningEnabled=false
+      - name: Verify generated MSIX contract
+        run: dotnet test tests/UnitTests/Neobash.PrintBridge.Tests.csproj -c Release --filter 'FullyQualifiedName~Packaged_manifest_resolves_the_printer_resource_and_registers_the_extension' --logger 'trx;LogFileName=c1-msix.trx'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c1-msix-contract-results
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: warn

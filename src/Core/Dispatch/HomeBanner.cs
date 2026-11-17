@@ -16,7 +16,8 @@ public static class HomeBanner
         && active is not null
         && activeQueue is { Detail: QueueDetail.Ready }
         && !DevicePresentation.IsKnownVirtual(activeQueue)
-        && string.Equals(active.QueueName, activeQueue.QueueName, StringComparison.OrdinalIgnoreCase);
+        && string.Equals(active.QueueName, activeQueue.QueueName, StringComparison.OrdinalIgnoreCase)
+        && LocalSetup.PreferenceHolds(active, activeQueue);
 
     public static string Title(bool catalogWaiting, bool catalogFailed, PrintDestination? active, InstalledQueue? activeQueue) =>
         ClaimsReady(catalogWaiting, catalogFailed, active, activeQueue) ? ReadyTitle : NeutralTitle;
